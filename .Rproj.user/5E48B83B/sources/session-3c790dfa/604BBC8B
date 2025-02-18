@@ -1,0 +1,26 @@
+{
+    "id": "604BBC8B",
+    "path": "~/KempBreezePtRocks/kempBreezeDataWrangling.R",
+    "project_path": "kempBreezeDataWrangling.R",
+    "type": "r_source",
+    "hash": "2136810645",
+    "contents": "",
+    "dirty": false,
+    "created": 1739907012047.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "1,1",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1739907033,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1739907033850,
+    "read_only": false,
+    "read_only_alternatives": []
+}
