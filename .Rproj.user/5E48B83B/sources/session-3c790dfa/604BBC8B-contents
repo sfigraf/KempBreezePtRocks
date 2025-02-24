@@ -6,7 +6,7 @@ dpeloyInfo <- read_csv("~/KB_PIT_Tagged_Rocks_2024_csv.csv")
 
 library(janitor)
 
-
+#fieldData
 tagInfo <- read_csv("~/Kemp Breeze/allAfterFieldData.csv")
   # mutate(RecapID_Clean = as.numeric(RecapID_Clean)#, 
   #        #DeployID = as.numeric(DeployID)
