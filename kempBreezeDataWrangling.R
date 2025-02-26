@@ -44,28 +44,28 @@ allSurveyandField <- rbind(deploysSurveyInfoJoined, recapsOnly)
 #if done right, Point number is same as deployID if there is no RecapID, 
 #or same as recapID, and each point id is different
 #QAQC
-#number of rows with a point should be equal to amount of unique entries
+#number of rows with a point should be equal to amount of unique entries, excluding NA entry
 nrow(
   allSurveyandField %>%
     filter(!is.na(N))
 )
 length(unique(allSurveyandField$Point))
 #see which points are in there multiple times
-# serves to catch potential wonky scenarios and data entry mistakes from yours truly 
+# serves to catch potential wonky scenarios and data entry mistakes 
 uniquePoints <- allSurveyandField %>%
   count(Point)
 
 # Attribute Info Joining --------------------------------------------------
+#comes from 2024_new_KB_tagged_rocks.xlsx in u drive
 attributeInfo <- read_csv("attributeInfo.csv")
 
 surveyFieldAttribute <- allSurveyandField %>%
   left_join(attributeInfo, by = c("TagID" = "TagID_Corrected"))
 
-#combining DeployID and recapID to POint for data's sake
-surveyFieldAttribute1 <- surveyFieldAttribute #%>%
-  #mutate(Point =  coalesce()
-
-write.csv(surveyFieldAttribute, "surveyFieldAttribute.csv")
+#don't need NA Point entries (means it either wasn't found in a relocate survey, or wasn't deployed)
+surveyFieldAttribute1 <- surveyFieldAttribute %>%
+  filter(!is.na(Point))
+write.csv(surveyFieldAttribute1, "surveyFieldAttribute.csv")
 
 
 # QAQC --------------------------------------------------------------------
