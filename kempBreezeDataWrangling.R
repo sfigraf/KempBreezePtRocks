@@ -14,7 +14,8 @@ surveyInfo <- read_csv("allKBAfterSurveyPoints.csv") #%>%
 ###since survey point numbers can be deployIDs or recapIDs, need to join with both recapID and deployID
 #surveyID dtermines if we get the right location
 #this is just the recapped instances
-recapsOnly <- inner_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"))
+#keep the Point column
+recapsOnly <- inner_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"), keep = TRUE) 
 #this is a helpful qaqc check: the rows that aren't able to get joined bc there is no recapID coorespoinding to Point
 #for deploys this is expected since recapID will be NA
 # but if a row has a recapID and didn't get joined, that's a problem
@@ -33,13 +34,26 @@ deploysSurveyInfoJoined <-  deploysOnly %>%
   #the filter (is.na(deployID)) helps to see which rows are getting removed from making deployID numeric
   #filter(is.na(DeployID))
   #filter(grepl("Deploy", SurveyID)) %>%
-  left_join(surveyInfo, by = c("SurveyID", "DeployID" = "Point"))
+  left_join(surveyInfo, by = c("SurveyID", "DeployID" = "Point"), keep = TRUE)
 
 ###combine these 2 datasets to get location info for deploys and recaps
 # shold be same amount of rows as orignal TagInfo
 allSurveyandField <- rbind(deploysSurveyInfoJoined, recapsOnly)
-
-
+#if a point doesn't have a northing and easting, it shouldn't have a point either
+#because it means it either wasn't found in a relocate survey, or wasn't deployed
+#if done right, Point number is same as deployID if there is no RecapID, 
+#or same as recapID, and each point id is different
+#QAQC
+#number of rows with a point should be equal to amount of unique entries
+nrow(
+  allSurveyandField %>%
+    filter(!is.na(N))
+)
+length(unique(allSurveyandField$Point))
+#see which points are in there multiple times
+# serves to catch potential wonky scenarios and data entry mistakes from yours truly 
+uniquePoints <- allSurveyandField %>%
+  count(Point)
 
 # Attribute Info Joining --------------------------------------------------
 attributeInfo <- read_csv("attributeInfo.csv")
@@ -47,16 +61,136 @@ attributeInfo <- read_csv("attributeInfo.csv")
 surveyFieldAttribute <- allSurveyandField %>%
   left_join(attributeInfo, by = c("TagID" = "TagID_Corrected"))
 
+#combining DeployID and recapID to POint for data's sake
+surveyFieldAttribute1 <- surveyFieldAttribute #%>%
+  #mutate(Point =  coalesce()
+
+write.csv(surveyFieldAttribute, "surveyFieldAttribute.csv")
 
 
 # QAQC --------------------------------------------------------------------
 
 library(leaflet)
 library(sf)
-
-arkStreamNetwork1 <- st_zm(arkStreamNetwork, drop = TRUE, what = "ZM")
+surveyFieldAttributeSF <- surveyFieldAttribute %>%
+  filter(!is.na(N))
+#arkStreamNetwork1 <- st_zm(arkStreamNetwork, drop = TRUE, what = "ZM")
+#From GIS:
+# NAD_1983_StatePlane_Colorado_North_FIPS_0501_Feet
+# WKID: 2231 Authority: EPSG
 
 #change data to sf object in preparation for spatial join with same crs as streamNetwork
-surveySitesSF <- st_as_sf(data, coords = c("UTMX", "UTMY"), crs = st_crs(arkStreamNetwork), remove = FALSE)
+surveyFieldAttributeSF1 <- st_as_sf(surveyFieldAttributeSF, coords = c("E", "N"), crs = st_crs("EPSG:2231"), remove = FALSE)
 
-surveyFieldAttributeSF <- surveyFieldAttribute
+latLongCRS <- st_crs("+proj=longlat +datum=WGS84 +no_defs") #should be same as +init=epsg:4326
+#transform to new crs for plotting with leaflet
+surveyFieldAttributeSF2 <- st_transform(surveyFieldAttributeSF1, latLongCRS) 
+
+
+depl2024_10 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Deploy 2024_10")
+depl2024_04 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Deploy 2024_04")
+depl2023 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Deploy 2023")
+rel2023 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Relocate 2023")
+rel2024 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Relocate 2024")
+
+
+leaflet() %>%
+  addTiles(options = providerTileOptions(maxZoom = 100), group = "OSM") %>%
+  addProviderTiles(providers$Esri.WorldImagery,
+                   options = providerTileOptions(maxZoom = 100), 
+                   group = "Satellite"
+  ) %>%
+  addAwesomeMarkers(data = depl2023,
+                    group = "Deploy 2023",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "purple"
+                    ), 
+                    popup = paste(
+                      "Deploy 2023", "<br>", 
+                      "Deploy ID: ", depl2023$DeployID, "<br>", 
+                      "Tag ID: ", depl2023$TagID, "<br>",
+                      "N:", depl2023$N, "<br>",
+                      "E:", depl2023$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+                    ) %>%
+  addAwesomeMarkers(data = rel2023,
+                    group = "Relocate 2023",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "green"
+                    ), 
+                    popup = paste(
+                      "Relocate 2023", "<br>", 
+                      "Relocate ID: ", rel2023$RecapID_Clean, "<br>", 
+                      "Tag ID: ", rel2023$TagID, "<br>",
+                      "N:", rel2023$N, "<br>",
+                      "E:", rel2023$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
+  addAwesomeMarkers(data = depl2024_04,
+                    group = "Deploy 2024_04",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "red"
+                    ), 
+                    popup = paste(
+                      "Deploy 2024_04", "<br>", 
+                      "Deploy ID: ", depl2024_04$DeployID, "<br>", 
+                      "Tag ID: ", depl2024_04$TagID, "<br>",
+                      "N:", depl2024_04$N, "<br>",
+                      "E:", depl2024_04$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
+  addAwesomeMarkers(data = rel2024,
+                    group = "Relocate 2024",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "blue"
+                    ), 
+                    popup = paste(
+                      "Relocate 2024", "<br>", 
+                      "Relocate ID: ", rel2024$RecapID_Clean, "<br>", 
+                      "Tag ID: ", rel2024$TagID, "<br>",
+                      "N:", rel2024$N, "<br>",
+                      "E:", rel2024$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
+  addAwesomeMarkers(data = depl2024_10,
+                    group = "Deploy 2024_10",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "orange"
+                    ), 
+                    popup = paste(
+                      "Deploy 2024_10", "<br>", 
+                      "Deploy ID: ", depl2024_10$DeployID, "<br>", 
+                      "Tag ID: ", depl2024_10$TagID, "<br>",
+                      "N:", depl2024_10$N, "<br>",
+                      "E:", depl2024_10$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
+  addLayersControl(overlayGroups = c("Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10"), 
+                   baseGroups = c("OSM", "Satellite")) %>%
+  addMeasure(primaryLengthUnit = "feet")
+  
