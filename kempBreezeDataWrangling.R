@@ -8,6 +8,17 @@ tagInfo <- read_csv("allAfterFieldData.csv")
   # mutate(RecapID_Clean = as.numeric(RecapID_Clean)#, 
   #        #DeployID = as.numeric(DeployID)
   #        )
+#get correct locations onto gravel aug and overflow# just needed to do once
+# GravelAugandOverflowJoining <- read_csv("GravelAugandOverflowJoining.csv")
+# 
+# tagInfo1 <- tagInfo %>%
+#   left_join(GravelAugandOverflowJoining, by = "TagID")
+# 
+# write.csv(tagInfo1, "allAfterFieldData1.csv", row.names = F)
+# x <- GravelAugandOverflowJoining %>%
+#   count(TagID)
+
+##Trimble srvey data from gis
 surveyInfo <- read_csv("allKBAfterSurveyPoints.csv") #%>%
   #mutate(Point = as.character(Point))
 
@@ -64,7 +75,10 @@ surveyFieldAttribute <- allSurveyandField %>%
 
 #don't need NA Point entries (means it either wasn't found in a relocate survey, or wasn't deployed)
 surveyFieldAttribute1 <- surveyFieldAttribute %>%
-  filter(!is.na(Point))
+  filter(!is.na(Point)) %>%
+  mutate(Hiding = ifelse(str_detect(RecapID, "h"), 1, 0),
+         Embedded = ifelse(str_detect(RecapID, "e"), 1, 0),
+         Buried = ifelse(str_detect(RecapID, "b"), 1, 0))
 write.csv(surveyFieldAttribute1, "surveyFieldAttribute.csv")
 
 
