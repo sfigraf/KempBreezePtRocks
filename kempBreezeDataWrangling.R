@@ -74,12 +74,39 @@ surveyFieldAttribute <- allSurveyandField %>%
   left_join(attributeInfo, by = c("TagID" = "TagID_Corrected"))
 
 #don't need NA Point entries (means it either wasn't found in a relocate survey, or wasn't deployed)
+is.na(surveyFieldAttribute$Notes) <- surveyFieldAttribute$Notes == ""
 surveyFieldAttribute1 <- surveyFieldAttribute %>%
   filter(!is.na(Point)) %>%
   mutate(Hiding = ifelse(str_detect(RecapID, "h"), 1, 0),
          Embedded = ifelse(str_detect(RecapID, "e"), 1, 0),
-         Buried = ifelse(str_detect(RecapID, "b"), 1, 0))
-write.csv(surveyFieldAttribute1, "surveyFieldAttribute.csv")
+         Buried = ifelse(str_detect(RecapID, "b"), 1, 0), 
+         Notes = ifelse(is.na(Notes), "", Notes),
+         Comments = ifelse(is.na(Comments), "", Comments),
+         allNotes = case_when(Notes != "" ~ paste(Notes, Comments, sep = ". "), 
+                              Notes == "" & Comments != "" ~ Comments, 
+                              TRUE ~ ""
+         ), 
+         Period = "After"
+         ) %>%
+  rename(Site = Site.x, 
+         SurveyID = SurveyID.x, 
+         TagSize_mm = `Tag Size (mm)`, 
+         A_Axis_mm = `A-axis (mm) Longest`,
+         B_Axis_mm = `B-axis (mm) Intermediate`, 
+         C_Axis_mm = `C-axis (mm) Thickness`, 
+         Gravelometer_mm = `Gravelometer (mm)`, 
+         Weight_g = `Weight (g)`, 
+         Particle_Class = `Particle Class`,
+         Size_Class = `Size Class1`)
+#columns from master sheet to make it easier to transfer over in excel
+masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"TagSize_mm",	"A_Axis_mm",
+"B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class",	"Hiding",	"Embedded",	"Buried",	"allNotes")
+
+surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
+  arrange(Point) %>%
+  select(all_of(masterSheetColumns))
+#this is the final saved datasheet copied into master excel file in U drive
+write.csv(surveyFieldAttribute2, "surveyFieldAttribute.csv", row.names = F)
 
 
 # QAQC --------------------------------------------------------------------
@@ -207,4 +234,23 @@ leaflet() %>%
   addLayersControl(overlayGroups = c("Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10"), 
                    baseGroups = c("OSM", "Satellite")) %>%
   addMeasure(primaryLengthUnit = "feet")
+
+
+
+# Movement Calculations ---------------------------------------------------
+
+#this is the combined file from KB_Survey_PITRocks_Master_20250213  on U drive
+AllPitRockData <- read_csv("AllPitRockData.csv")
+#cumulative distance by period
+allDistance <- AllPitRockData %>%
+  mutate(Date = mdy(Date)) %>%
+  filter(Code == "PITRCK") %>%
+  group_by(TagID, Period) %>%
+  arrange(Date) %>%
+  #this projection is in feet so it doesn't need a conversion
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)#, 
+         #D_ft = round(Distance * 3.28084, 2)
+         ) #%>%
+  #filter(SurveyID == "Relocate 2023")
+
   
