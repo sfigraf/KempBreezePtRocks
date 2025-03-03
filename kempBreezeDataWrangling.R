@@ -244,7 +244,8 @@ AllPitRockData <- read_csv("AllPitRockData.csv")
 #cumulative distance by period
 AllPitRockData1 <- AllPitRockData %>%
   mutate(Date = mdy(Date)) %>%
-  filter(Code == "PITRCK")
+  #grepl rather than == gets pitrck? entries. maybe should delete question mark in data
+  filter(grepl("PITRCK", Code))
 
 allDistance <- AllPitRockData1 %>%
   group_by(TagID, Period) %>%
@@ -278,15 +279,17 @@ mov2023 <- x %>%
   group_by(TagID) %>%
   arrange(Date) %>%
   mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
-  ) 
+  ) #%>%
 
 mov2023QAQC <- mov2023 %>%
   filter(!is.na(Distance))
 # 
 # test <- x2023Distance %>%
 #   filter(SurveyID %in% c("Relocate 2023"))
+#this is a list of tags from 2023 movement list master that had movements according to eric. 
+#good for QAQC to see potentially which tags didn't get entered in the datasheet
 masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
-x1 <- masterFile2023Tags %>%
+potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
   anti_join(mov2023QAQC, by = c("tagsInaMasterfile" = "TagID"))
 
 
