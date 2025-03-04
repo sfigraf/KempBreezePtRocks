@@ -77,11 +77,13 @@ surveyFieldAttribute <- allSurveyandField %>%
 is.na(surveyFieldAttribute$Notes) <- surveyFieldAttribute$Notes == ""
 surveyFieldAttribute1 <- surveyFieldAttribute %>%
   filter(!is.na(Point)) %>%
-  mutate(Hiding = ifelse(str_detect(RecapID, "h"), 1, 0),
+  mutate(Field_Movement = ifelse(str_detect(RecapID, "\\*"), 1, 0),
+         Hiding = ifelse(str_detect(RecapID, "h"), 1, 0),
          Embedded = ifelse(str_detect(RecapID, "e"), 1, 0),
          Buried = ifelse(str_detect(RecapID, "b"), 1, 0), 
          Notes = ifelse(is.na(Notes), "", Notes),
          Comments = ifelse(is.na(Comments), "", Comments),
+         Comments = ifelse(grepl("~", RecapID), paste(Comments, "Approximate recap location."), Comments),
          allNotes = case_when(Notes != "" ~ paste(Notes, Comments, sep = ". "), 
                               Notes == "" & Comments != "" ~ Comments, 
                               TRUE ~ ""
@@ -100,7 +102,7 @@ surveyFieldAttribute1 <- surveyFieldAttribute %>%
          Size_Class = `Size Class1`)
 #columns from master sheet to make it easier to transfer over in excel
 masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"TagSize_mm",	"A_Axis_mm",
-"B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class",	"Hiding",	"Embedded",	"Buried",	"allNotes")
+"B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class", "Field_Movement",	"Hiding",	"Embedded",	"Buried",	"allNotes")
 
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
@@ -240,6 +242,7 @@ leaflet() %>%
 # Movement Calculations ---------------------------------------------------
 
 #this is the combined file from KB_Survey_PITRocks_Master_20250213  on U drive
+#this is basically the encounter history
 AllPitRockData <- read_csv("AllPitRockData.csv")
 #cumulative distance by period
 AllPitRockData1 <- AllPitRockData %>%
@@ -247,16 +250,52 @@ AllPitRockData1 <- AllPitRockData %>%
   #grepl rather than == gets pitrck? entries. maybe should delete question mark in data
   filter(grepl("PITRCK", Code))
 
+#get distance between found/deploy and next found
 allDistance <- AllPitRockData1 %>%
   group_by(TagID, Period) %>%
   arrange(Date) %>%
   #this projection is in feet so it doesn't need a conversion
-  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)#, 
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+         #TimePeriodDuration = paste(lag(Date), Date, sep = " - ")
          #D_ft = round(Distance * 3.28084, 2)
          ) #%>%
-  #filter(SurveyID == "Relocate 2023")
+#this df should be empty
+# x <- allDistance %>%
+#   filter(Distance > 0,
+#          grepl("Deploy", SurveyID))
 
-###need to get distance moved by runoff year
+#total it all up
+summaryFile <- allDistance %>%
+  group_by(TagID, Period) %>%
+  arrange(Date) %>%
+  summarize(
+    #keep atribute cols
+    deployRiffleID = unique(RiffleID),
+    TagSize_mm = unique(TagSize_mm),
+    A_Axis_mm = unique(A_Axis_mm),
+    B_Axis_mm = unique(B_Axis_mm),
+    C_Axis_mm = unique(C_Axis_mm),
+    Gravelometer_mm = unique(Gravelometer_mm),
+    Weight_g = unique(Weight_g),
+    Particle_Class = unique(Particle_Class),
+    Size_Class = unique(Size_Class),
+    totalDistance_ft = sum(Distance, na.rm = T), 
+            movementDuration = paste(first(Date), last(Date), sep = " to "),
+            #first date should always be deploy date
+            DeployDate = first(Date), 
+            #plyr ifelse preserves Date type
+            LastRecapDate = dplyr::if_else(last(Date) == first(Date), NA, last(Date)), 
+             
+            #takes from column Point where min date is 
+            deployID = Point[which.min(Date)]
+  )
+
+write.csv(summaryFile, "summaryFile.csv", row.names = FALSE)
+
+
+
+
+#######need to get distance moved by runoff year
 ###2019
 mov2019 <- AllPitRockData1 %>%
   filter(SurveyID %in% c("Relocate 2019", "Deploy 2019")) %>%
@@ -305,9 +344,9 @@ mov2023QAQC <- mov2023 %>%
 #   filter(SurveyID %in% c("Relocate 2023"))
 #this is a list of tags from 2023 movement list master that had movements according to eric. 
 #good for QAQC to see potentially which tags didn't get entered in the datasheet
-masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
-potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
-  anti_join(mov2023QAQC, by = c("tagsInaMasterfile" = "TagID"))
+# masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
+# potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
+#   anti_join(mov2023QAQC, by = c("tagsInaMasterfile" = "TagID"))
 
 ###2024
 mov2024 <- AllPitRockData1 %>%
@@ -339,8 +378,73 @@ allMovementdataCombined1 <- allMovementdataCombined %>%
          Moved_2PD = ifelse(Distance_ft > 2*B_Axis_ft, 1, 0)
          )
 
-test <- allMovementdataCombined1 %>%
-  filter(Moved_2PD == 1)
+#adding old notes
+#comes from old master File
+oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
+
+##adding notes 
+allMovementdataCombined2 <- allMovementdataCombined1 %>%
+  left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Embedded", "Buried", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
+  mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
+        Hiding = coalesce(Hiding.x, Hiding.y), 
+         Buried = coalesce(Buried.x, Buried.y), 
+         Embedded = coalesce(Embedded.x, Embedded.y)
+         ) %>% 
+  #unite is ogod for pasting columns together
+  unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) %>%
+  #unite("Field_Movement", c("Field_Movement.x", "Field_Movement.y"), sep = ". ",  na.rm = TRUE, remove = FALSE) %>%
+  mutate(Site = case_when(RiffleID == 1 ~ "Riffle 1", 
+                          RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
+                          RiffleID == 3 ~ "Riffle 3", 
+                          grepl("GA", RiffleID) ~ "GravelAug",
+                          grepl("Overflow", RiffleID) ~ "Overflow"
+                          ))
+# cat(names(oldMasterMovementsCombined), sep = "', '")
+# names(oldMasterMovementsCombined)
+columnNames <- c('Point', 'E', 'N', 'Elevation', 'Code', 'SurveyID', 'Year', 'Period', 'TagID', 'RiffleID', 'Site', 'TagSize_mm', 
+                 'A_Axis_mm', 'B_Axis_mm', 'B_Axis_ft', 'C_Axis_mm', 'Gravelometer_mm', 'Weight_g', 'Particle_Class', 'Size_Class', 'Size_Class2', 
+                 'Distance_ft', 'Distance_m', 
+                 'Field_Movement', 'Moved_1PD', 'Moved_2PD', 'Hiding', 'Embedded', 'Buried', 'Notes')
+#NA readings in Movement field are due to movements that don't occur in the correct runoff year; these will show up in cumulative movement
+allMovementdataCombined3 <- allMovementdataCombined2 %>%
+  select(all_of(columnNames))
+###This is what goes in the master file for movementsCombined
+write.csv(allMovementdataCombined3, "AllMovementsCombined.csv", row.names = FALSE)
+# names(allMovementdataCombined2)
+
+####
+
+
+##QAQC
+x <- allMovementdataCombined3[,c("Point", "TagID", "SurveyID", "Distance_ft")] %>%
+  left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Distance_ft")], by = c("Point", "TagID", "SurveyID")) %>%
+  #sees how the difference is between old movements and R calculated ones
+  mutate(dif = Distance_ft.x - Distance_ft.y)
+  
+#seeing how many entries each one has
+x <- oldMasterMovementsCombined %>%
+  count(SurveyID)
+
+y <- allMovementdataCombined3 %>%
+  count(SurveyID)
+
+y1 <- AllPitRockData %>%
+  count(SurveyID)
+
+xx <- AllPitRockData %>%
+  filter(SurveyID == "Relocate 2019") %>%
+  anti_join(allMovementdataCombined3 %>%
+              filter(SurveyID == "Relocate 2019"), by = "TagID" )
+
+# masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
+# 
+# 
+# test <- allMovementdataCombined1 %>%
+#   filter(Moved_2PD == 1)
+# 
+# potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
+#   anti_join(test, by = c("TagID"))
+
 
 # x2023 <- AllPitRockData1 %>%
 #   filter(Year == 2023)
