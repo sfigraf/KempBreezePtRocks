@@ -257,30 +257,47 @@ allDistance <- AllPitRockData1 %>%
   #filter(SurveyID == "Relocate 2023")
 
 ###need to get distance moved by runoff year
-x <- AllPitRockData1 %>%
-  #first, get year column based off survey ID, since sometimes the date doesn't reflect runoff year
-  mutate(Year = case_when(
-    SurveyID %in% c("Relocate 2019", "Deploy 2019") ~ 2019, 
-    SurveyID %in% c("Relocate 2020", "Deploy 2020") ~ 2020,
-    SurveyID %in% c("Relocate 2022", "Deploy 2021") ~ 2021, 
-    SurveyID %in% c("Relocate 2023", "Deploy 2023") ~ 2023, 
-    SurveyID %in% c("Relocate 2024", "Deploy 2024_04") ~ 2024
-                          )
-         ) 
-# xbefore <- x %>%
-#   filter(Period == "Before")
-# 
-# xafter <- x %>%
-#   filter(Period == "After")
-
-###start with 2023
-mov2023 <- x %>%
-  filter(SurveyID %in% c("Relocate 2023", "Deploy 2023")) %>%
+###2019
+mov2019 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2019", "Deploy 2019")) %>%
+  mutate(Year = 2019) %>%
   group_by(TagID) %>%
   arrange(Date) %>%
   mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
-  ) #%>%
+  ) %>% 
+  filter(SurveyID == "Relocate 2019")
 
+###2020
+mov2020 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2019", "Relocate 2020")) %>%
+  mutate(Year = 2020) %>%
+  group_by(TagID) %>%
+  arrange(Date) %>%
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+  ) %>% 
+  filter(SurveyID == "Relocate 2020")
+
+###2021
+mov2021 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2022", "Relocate 2020")) %>%
+  mutate(Year = 2021) %>%
+  group_by(TagID) %>%
+  arrange(Date) %>%
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+  ) %>% 
+  filter(SurveyID == "Relocate 2022")
+
+###2023
+mov2023 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2023", "Deploy 2023")) %>%
+  mutate(Year = 2023) %>%
+  group_by(TagID) %>%
+  arrange(Date) %>%
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+  ) %>% 
+  filter(SurveyID == "Relocate 2023")
+
+#for known data already, this df should be the same number of rows as data already in master file
 mov2023QAQC <- mov2023 %>%
   filter(!is.na(Distance))
 # 
@@ -292,27 +309,57 @@ masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
 potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
   anti_join(mov2023QAQC, by = c("tagsInaMasterfile" = "TagID"))
 
+###2024
+mov2024 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2024", "Deploy 2024_04", "Relocate 2023")) %>%
+  mutate(Year = 2024) %>%
+  group_by(TagID) %>%
+  arrange(Date) %>%
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+  ) %>%
+  filter(SurveyID == "Relocate 2024")
 
+###bding all together
+allMovements = list(
+  mov2019, 
+  mov2020, 
+  mov2021, 
+  mov2023, 
+  mov2024
+)
+allMovementdataCombined <- dplyr::bind_rows(allMovements)
 
-x2023 <- x %>%
-  filter(Year == 2023)
-#get pairs of deploy/relocates
-deploys <- x2023 %>%
-  filter(grepl("Deploy", SurveyID)) 
-relocates <- x2023 %>%
-  filter(grepl("Relocate", SurveyID)) %>%
-  select(TagID, Year, N, E) %>%
-  rename(relocate_N = N, 
-         relocate_E = E)
+allMovementdataCombined1 <- allMovementdataCombined %>%
+  ungroup() %>%
+  rename(Distance_ft = Distance) %>%
+  mutate(Size_Class2 = gsub('[[:digit:]]+', '', Size_Class), 
+         Distance_m = Distance_ft *0.3048, 
+         B_Axis_ft = B_Axis_mm * 0.00328084, 
+         Moved_1PD = ifelse(Distance_ft > B_Axis_ft, 1, 0), 
+         Moved_2PD = ifelse(Distance_ft > 2*B_Axis_ft, 1, 0)
+         )
 
-#left join gets all rocks and gives NA if they weren't found that year, inner join would get only deploy/relocate parings
-deploysRelocatesPaired <- deploys %>%
-  #group_by(Period) %>%
-  left_join(relocates, by = c("TagID", "Year")) #228000607501
-  
-#getting ditsance for that year
-x2023Distance <- deploysRelocatesPaired %>%
-  mutate(Distance = round(sqrt((relocate_N - N)^2 + (relocate_E - E)^2), 2)
-  )
+test <- allMovementdataCombined1 %>%
+  filter(Moved_2PD == 1)
 
-####2024
+# x2023 <- AllPitRockData1 %>%
+#   filter(Year == 2023)
+# #get pairs of deploy/relocates
+# deploys <- x2023 %>%
+#   filter(grepl("Deploy", SurveyID)) 
+# relocates <- x2023 %>%
+#   filter(grepl("Relocate", SurveyID)) %>%
+#   select(TagID, Year, N, E) %>%
+#   rename(relocate_N = N, 
+#          relocate_E = E)
+# 
+# #left join gets all rocks and gives NA if they weren't found that year, inner join would get only deploy/relocate parings
+# deploysRelocatesPaired <- deploys %>%
+#   #group_by(Period) %>%
+#   left_join(relocates, by = c("TagID", "Year")) #228000607501
+#   
+# #getting ditsance for that year
+# x2023Distance <- deploysRelocatesPaired %>%
+#   mutate(Distance = round(sqrt((relocate_N - N)^2 + (relocate_E - E)^2), 2)
+#   )
+
