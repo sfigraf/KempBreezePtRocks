@@ -270,7 +270,7 @@ summaryFile <- allDistance %>%
   arrange(Date) %>%
   summarize(
     #keep atribute cols
-    deployRiffleID = unique(RiffleID),
+    RiffleID = unique(RiffleID),
     TagSize_mm = unique(TagSize_mm),
     A_Axis_mm = unique(A_Axis_mm),
     B_Axis_mm = unique(B_Axis_mm),
@@ -288,7 +288,16 @@ summaryFile <- allDistance %>%
              
             #takes from column Point where min date is 
             deployID = Point[which.min(Date)]
-  )
+  ) %>%
+  mutate(Site = case_when(RiffleID == 0 ~ "Riffle 0", 
+                          RiffleID == 1 ~ "Riffle 1", 
+                          RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
+                          RiffleID == 3 ~ "Riffle 3", 
+                          grepl("GA", RiffleID) ~ "GravelAug",
+                          grepl("Overflow", RiffleID) ~ "Overflow"
+  )) %>%
+  relocate(Site, .after = RiffleID) %>%
+  relocate(deployID)
 
 write.csv(summaryFile, "summaryFile.csv", row.names = FALSE)
 
