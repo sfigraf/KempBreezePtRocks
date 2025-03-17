@@ -5,10 +5,12 @@ library(janitor)
 
 #fieldData
 tagInfo <- read_csv("allAfterFieldData.csv")
-  # mutate(RecapID_Clean = as.numeric(RecapID_Clean)#, 
-  #        #DeployID = as.numeric(DeployID)
-  #        )
-#get correct locations onto gravel aug and overflow# just needed to do once
+
+##Trimble sruvey data, exported and combined attribute tables from gis
+surveyInfo <- read_csv("allKBAfterSurveyPoints.csv") 
+
+#NOT RELEVANT FOR NEW DATA ADDING
+#get correct locations onto gravel aug and overflow# just needed to do once, 
 # GravelAugandOverflowJoining <- read_csv("GravelAugandOverflowJoining.csv")
 # 
 # tagInfo1 <- tagInfo %>%
@@ -18,42 +20,51 @@ tagInfo <- read_csv("allAfterFieldData.csv")
 # x <- GravelAugandOverflowJoining %>%
 #   count(TagID)
 
-##Trimble srvey data from gis
-surveyInfo <- read_csv("allKBAfterSurveyPoints.csv") #%>%
-  #mutate(Point = as.character(Point))
+## BACK TO NEW DATA ADDING
 
 ###since survey point numbers can be deployIDs or recapIDs, need to join with both recapID and deployID
-#surveyID dtermines if we get the right location
-#this is just the recapped instances
+#surveyID field determines if we get the right location
+
+#RECAPS
+#starting with just the recapped instances
+#For recaptured tags, we want to join with survey info based off of RecapID. 
 #keep the Point column
 recapsOnly <- inner_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"), keep = TRUE) 
-#this is a helpful qaqc check: the rows that aren't able to get joined bc there is no recapID coorespoinding to Point
-#for deploys this is expected since recapID will be NA
+
+#this is a helpful qaqc check: the rows that aren't able to get joined bc there is no recapID corresponding to Point
+# for deploys this is expected since recapID will be NA
 # but if a row has a recapID and didn't get joined, that's a problem
+#so check if this DF has any non-NAs in RecapID
 deploysAndNA <- anti_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"))
 
-#now we take out the recap instances with the deploy ID so we can just get isntances of deployment
+##DEPLOYS
+#now we take out the recap instances with the deploy ID so we can just get instances of deployment
 deploysOnly <- tagInfo %>%
   #using this filter selects all entries for just deployment surveys
   #should be the same amount of rows as deploysAndNA
   filter(is.na(RecapID_Clean)) 
 
-deploysSurveyInfoJoined <-  deploysOnly %>%
+#For Deployed tags, we want to join with survey info based off of DeployID
+deploysSurveyInfoJoined <- deploysOnly %>%
   #this gets rid of all character entries in DeployID so important to make sure everything is a number in this field
+  #if not, go edit the csv in excel
   #done for joining
   mutate(DeployID = as.numeric(DeployID)) %>%
   #the filter (is.na(deployID)) helps to see which rows are getting removed from making deployID numeric
   #filter(is.na(DeployID))
   #filter(grepl("Deploy", SurveyID)) %>%
+  #joins with survey Info. Some NAs introduced by coercion are ok for points that don't have a deploy ID
   left_join(surveyInfo, by = c("SurveyID", "DeployID" = "Point"), keep = TRUE)
 
-###combine these 2 datasets to get location info for deploys and recaps
-# shold be same amount of rows as orignal TagInfo
+###combine recap/deploy datasets 
+# should be same amount of rows as orignal TagInfo
+#this is the final df that now contains recap and deployed rocks from field data with correct location data.
 allSurveyandField <- rbind(deploysSurveyInfoJoined, recapsOnly)
-#if a point doesn't have a northing and easting, it shouldn't have a point either
+#if a row doesn't have a northing and easting, it shouldn't have a point number either
 #because it means it either wasn't found in a relocate survey, or wasn't deployed
-#if done right, Point number is same as deployID if there is no RecapID, 
+#if done right, Point number is either the same as deployID (if there is no RecapID), 
 #or same as recapID, and each point id is different
+
 #QAQC
 #number of rows with a point should be equal to amount of unique entries, excluding NA entry
 nrow(
@@ -63,16 +74,20 @@ nrow(
 length(unique(allSurveyandField$Point))
 #see which points are in there multiple times
 # serves to catch potential wonky scenarios and data entry mistakes 
+#view this df and sort by n
+#if a point has multiple entries, it was entered in the data incorrectly or there is somethine else going on
 uniquePoints <- allSurveyandField %>%
   count(Point)
 
 # Attribute Info Joining --------------------------------------------------
-#comes from 2024_new_KB_tagged_rocks.xlsx in u drive
+# joins field data with locations with attribute info
+#comes from U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\2024_new_KB_tagged_rocks.xlsx in u drive
 attributeInfo <- read_csv("attributeInfo.csv")
-
+#joins
 surveyFieldAttribute <- allSurveyandField %>%
   left_join(attributeInfo, by = c("TagID" = "TagID_Corrected"))
 
+#getting desired columns/format
 #don't need NA Point entries (means it either wasn't found in a relocate survey, or wasn't deployed)
 is.na(surveyFieldAttribute$Notes) <- surveyFieldAttribute$Notes == ""
 surveyFieldAttribute1 <- surveyFieldAttribute %>%
@@ -100,29 +115,28 @@ surveyFieldAttribute1 <- surveyFieldAttribute %>%
          Weight_g = `Weight (g)`, 
          Particle_Class = `Particle Class`,
          Size_Class = `Size Class1`)
-#columns from master sheet to make it easier to transfer over in excel
+#columns from master sheet ("U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\KB_Survey_PITRocks_Master_20250213.xlsx", sheet allDataPitROcks) to make it easier to transfer over in excel
 masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"TagSize_mm",	"A_Axis_mm",
 "B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class", "Field_Movement",	"Hiding",	"Embedded",	"Buried",	"allNotes")
 
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
   select(all_of(masterSheetColumns))
-#this is the final saved datasheet copied into master excel file in U drive
+#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitROcks
 write.csv(surveyFieldAttribute2, "surveyFieldAttribute.csv", row.names = F)
 
 
 # QAQC --------------------------------------------------------------------
-
+#this is a method to spatially check individual surveys 
 library(leaflet)
 library(sf)
-surveyFieldAttributeSF <- surveyFieldAttribute %>%
+surveyFieldAttributeSF <- surveyFieldAttribute2 %>%
   filter(!is.na(N))
-#arkStreamNetwork1 <- st_zm(arkStreamNetwork, drop = TRUE, what = "ZM")
 #From GIS:
 # NAD_1983_StatePlane_Colorado_North_FIPS_0501_Feet
 # WKID: 2231 Authority: EPSG
 
-#change data to sf object in preparation for spatial join with same crs as streamNetwork
+#change data to sf object with same CRS used in gdb the coordinates came from
 surveyFieldAttributeSF1 <- st_as_sf(surveyFieldAttributeSF, coords = c("E", "N"), crs = st_crs("EPSG:2231"), remove = FALSE)
 
 latLongCRS <- st_crs("+proj=longlat +datum=WGS84 +no_defs") #should be same as +init=epsg:4326
