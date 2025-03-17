@@ -1,13 +1,13 @@
 library(tidyverse)
 library(janitor)
-
+#PART 1
 # Field and Survey Data joining -------------------------------------------
 
 #fieldData
-tagInfo <- read_csv("allAfterFieldData.csv")
+tagInfo <- read_csv("InputData/allAfterFieldData.csv")
 
 ##Trimble sruvey data, exported and combined attribute tables from gis
-surveyInfo <- read_csv("allKBAfterSurveyPoints.csv") 
+surveyInfo <- read_csv("InputData/allKBAfterSurveyPoints.csv") 
 
 #NOT RELEVANT FOR NEW DATA ADDING
 #get correct locations onto gravel aug and overflow# just needed to do once, 
@@ -82,7 +82,7 @@ uniquePoints <- allSurveyandField %>%
 # Attribute Info Joining --------------------------------------------------
 # joins field data with locations with attribute info
 #comes from U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\2024_new_KB_tagged_rocks.xlsx in u drive
-attributeInfo <- read_csv("attributeInfo.csv")
+attributeInfo <- read_csv("InputData/attributeInfo.csv")
 #joins
 surveyFieldAttribute <- allSurveyandField %>%
   left_join(attributeInfo, by = c("TagID" = "TagID_Corrected"))
@@ -123,14 +123,15 @@ surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
   select(all_of(masterSheetColumns))
 #once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitROcks
-write.csv(surveyFieldAttribute2, "surveyFieldAttribute.csv", row.names = F)
+write.csv(surveyFieldAttribute2, "OutputData/surveyFieldAttribute.csv", row.names = F)
 
 
 # QAQC --------------------------------------------------------------------
-#this is a method to spatially check individual surveys 
+#this is a method to spatially check individual surveys
+# can customize as needed for new data
 library(leaflet)
 library(sf)
-surveyFieldAttributeSF <- surveyFieldAttribute2 %>%
+surveyFieldAttributeSF <- surveyFieldAttribute %>%
   filter(!is.na(N))
 #From GIS:
 # NAD_1983_StatePlane_Colorado_North_FIPS_0501_Feet
@@ -145,15 +146,15 @@ surveyFieldAttributeSF2 <- st_transform(surveyFieldAttributeSF1, latLongCRS)
 
 
 depl2024_10 <- surveyFieldAttributeSF2 %>%
-  filter(SurveyID == "Deploy 2024_10")
+  filter(SurveyID.x == "Deploy 2024_10")
 depl2024_04 <- surveyFieldAttributeSF2 %>%
-  filter(SurveyID == "Deploy 2024_04")
+  filter(SurveyID.x == "Deploy 2024_04")
 depl2023 <- surveyFieldAttributeSF2 %>%
-  filter(SurveyID == "Deploy 2023")
+  filter(SurveyID.x == "Deploy 2023")
 rel2023 <- surveyFieldAttributeSF2 %>%
-  filter(SurveyID == "Relocate 2023")
+  filter(SurveyID.x == "Relocate 2023")
 rel2024 <- surveyFieldAttributeSF2 %>%
-  filter(SurveyID == "Relocate 2024")
+  filter(SurveyID.x == "Relocate 2024")
 
 
 leaflet() %>%
@@ -173,6 +174,7 @@ leaflet() %>%
                     popup = paste(
                       "Deploy 2023", "<br>", 
                       "Deploy ID: ", depl2023$DeployID, "<br>", 
+                      "Point: ", depl2023$Point, "<br>", 
                       "Tag ID: ", depl2023$TagID, "<br>",
                       "N:", depl2023$N, "<br>",
                       "E:", depl2023$E, "<br>"
@@ -190,6 +192,7 @@ leaflet() %>%
                     popup = paste(
                       "Relocate 2023", "<br>", 
                       "Relocate ID: ", rel2023$RecapID_Clean, "<br>", 
+                      "Point: ", rel2023$Point, "<br>", 
                       "Tag ID: ", rel2023$TagID, "<br>",
                       "N:", rel2023$N, "<br>",
                       "E:", rel2023$E, "<br>"
@@ -207,6 +210,7 @@ leaflet() %>%
                     popup = paste(
                       "Deploy 2024_04", "<br>", 
                       "Deploy ID: ", depl2024_04$DeployID, "<br>", 
+                      "Point: ", depl2024_04$Point, "<br>", 
                       "Tag ID: ", depl2024_04$TagID, "<br>",
                       "N:", depl2024_04$N, "<br>",
                       "E:", depl2024_04$E, "<br>"
@@ -224,6 +228,7 @@ leaflet() %>%
                     popup = paste(
                       "Relocate 2024", "<br>", 
                       "Relocate ID: ", rel2024$RecapID_Clean, "<br>", 
+                      "Point: ", rel2024$Point, "<br>", 
                       "Tag ID: ", rel2024$TagID, "<br>",
                       "N:", rel2024$N, "<br>",
                       "E:", rel2024$E, "<br>"
@@ -241,6 +246,7 @@ leaflet() %>%
                     popup = paste(
                       "Deploy 2024_10", "<br>", 
                       "Deploy ID: ", depl2024_10$DeployID, "<br>", 
+                      "Point: ", depl2024_10$Point, "<br>", 
                       "Tag ID: ", depl2024_10$TagID, "<br>",
                       "N:", depl2024_10$N, "<br>",
                       "E:", depl2024_10$E, "<br>"
@@ -251,14 +257,24 @@ leaflet() %>%
                    baseGroups = c("OSM", "Satellite")) %>%
   addMeasure(primaryLengthUnit = "feet")
 
+#once the map is in the viewer, you can save it if you want as an itneractive html by selecting "export" -> "save as web page"
 
 
-# Movement Calculations ---------------------------------------------------
-
-#this is the combined file from KB_Survey_PITRocks_Master_20250213  on U drive
+# PART 2: Movement Calculations ---------------------------------------------------
+#after part 1, 
+# from KB_Survey_PITRocks_Master_20250213 on U Drive, export sheet AllDataPITRocks to a csv and put in InputFiles
 #this is basically the encounter history
-AllPitRockData <- read_csv("AllPitRockData.csv")
-#cumulative distance by period
+AllPitRockData <- read_csv("InputData/AllPitRockData.csv")
+###One Time Fix to combine notes from movement sheet with notes from new data
+#adding old notes
+#comes from old master File
+# oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
+# combinedNotes <- AllPitRockData %>%
+#   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
+#   unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) 
+# write.csv(combinedNotes, "AllPitRockDataAllNotes.csv", row.names = F)
+
+### TOTAL cumulative distance by period
 AllPitRockData1 <- AllPitRockData %>%
   mutate(Date = mdy(Date)) %>%
   #grepl rather than == gets pitrck? entries. maybe should delete question mark in data
@@ -273,6 +289,7 @@ allDistance <- AllPitRockData1 %>%
          #TimePeriodDuration = paste(lag(Date), Date, sep = " - ")
          #D_ft = round(Distance * 3.28084, 2)
          ) #%>%
+#QAQC: seeing if any "Deploy" data got distances associated
 #this df should be empty
 # x <- allDistance %>%
 #   filter(Distance > 0,
@@ -313,12 +330,14 @@ summaryFile <- allDistance %>%
   relocate(Site, .after = RiffleID) %>%
   relocate(deployID)
 
-write.csv(summaryFile, "summaryFile.csv", row.names = FALSE)
+#This file gets manually copied and pasted into KB_Survey_PITRocks_Master_20250213, sheet MasterPITRockList
+write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 
 
 
 #######need to get distance moved by runoff year
+#manually add year in as column based off survey dates
 ###2019
 mov2019 <- AllPitRockData1 %>%
   filter(SurveyID %in% c("Relocate 2019", "Deploy 2019")) %>%
@@ -365,8 +384,10 @@ mov2023QAQC <- mov2023 %>%
 # 
 # test <- x2023Distance %>%
 #   filter(SurveyID %in% c("Relocate 2023"))
+###OPTIONAL QAQC
 #this is a list of tags from 2023 movement list master that had movements according to eric. 
 #good for QAQC to see potentially which tags didn't get entered in the datasheet
+#i believe this came from MOvementDat_Post in the master file on U drive
 # masterFile2023Tags <- read_csv("masterFile2023Tags.csv")
 # potentialTagsNotEnteredCorrectly <- masterFile2023Tags %>%
 #   anti_join(mov2023QAQC, by = c("tagsInaMasterfile" = "TagID"))
@@ -381,7 +402,7 @@ mov2024 <- AllPitRockData1 %>%
   ) %>%
   filter(SurveyID == "Relocate 2024")
 
-###bding all together
+###binding all back together
 allMovements = list(
   mov2019, 
   mov2020, 
@@ -390,7 +411,7 @@ allMovements = list(
   mov2024
 )
 allMovementdataCombined <- dplyr::bind_rows(allMovements)
-
+#getting desired colkumns/format
 allMovementdataCombined1 <- allMovementdataCombined %>%
   ungroup() %>%
   rename(Distance_ft = Distance) %>%
@@ -401,21 +422,19 @@ allMovementdataCombined1 <- allMovementdataCombined %>%
          Moved_2PD = ifelse(Distance_ft > 2*B_Axis_ft, 1, 0)
          )
 
-#adding old notes
-#comes from old master File
-oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
-
 ##adding notes 
-allMovementdataCombined2 <- allMovementdataCombined1 %>%
+allMovementdataCombined1 <- allMovementdataCombined1 %>%
   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Embedded", "Buried", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
   mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
         Hiding = coalesce(Hiding.x, Hiding.y), 
          Buried = coalesce(Buried.x, Buried.y), 
          Embedded = coalesce(Embedded.x, Embedded.y)
          ) %>% 
-  #unite is ogod for pasting columns together
-  unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) %>%
-  #unite("Field_Movement", c("Field_Movement.x", "Field_Movement.y"), sep = ". ",  na.rm = TRUE, remove = FALSE) %>%
+  #unite is good for pasting columns together
+  unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE)
+  
+  
+allMovementdataCombined2 <- allMovementdataCombined1 %>%
   mutate(Site = case_when(RiffleID == 1 ~ "Riffle 1", 
                           RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
                           RiffleID == 3 ~ "Riffle 3", 
