@@ -122,11 +122,11 @@ masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Dat
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
   select(all_of(masterSheetColumns))
-#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitROcks
+#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitRocks
 write.csv(surveyFieldAttribute2, "OutputData/surveyFieldAttribute.csv", row.names = F)
 
 
-# QAQC --------------------------------------------------------------------
+# Optional QAQC --------------------------------------------------------------------
 #this is a method to spatially check individual surveys
 # can customize as needed for new data
 library(leaflet)
@@ -270,8 +270,14 @@ AllPitRockData <- read_csv("InputData/AllPitRockData.csv")
 #comes from old master File
 # oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
 # combinedNotes <- AllPitRockData %>%
-#   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
-#   unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) 
+#   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Buried", "Embedded", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
+#   mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
+#          Hiding = coalesce(Hiding.x, Hiding.y), 
+#          Buried = coalesce(Buried.x, Buried.y), 
+#          Embedded = coalesce(Embedded.x, Embedded.y)
+#   ) %>% 
+#   unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) %>%
+#   select(all_of(names(AllPitRockData)))
 # write.csv(combinedNotes, "AllPitRockDataAllNotes.csv", row.names = F)
 
 ### TOTAL cumulative distance by period
@@ -334,6 +340,7 @@ summaryFile <- allDistance %>%
 write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 
+# Part 3 ------------------------------------------------------------------
 
 
 #######need to get distance moved by runoff year
@@ -411,7 +418,7 @@ allMovements = list(
   mov2024
 )
 allMovementdataCombined <- dplyr::bind_rows(allMovements)
-#getting desired colkumns/format
+#getting desired columns/format
 allMovementdataCombined1 <- allMovementdataCombined %>%
   ungroup() %>%
   rename(Distance_ft = Distance) %>%
@@ -421,18 +428,6 @@ allMovementdataCombined1 <- allMovementdataCombined %>%
          Moved_1PD = ifelse(Distance_ft > B_Axis_ft, 1, 0), 
          Moved_2PD = ifelse(Distance_ft > 2*B_Axis_ft, 1, 0)
          )
-
-##adding notes 
-allMovementdataCombined1 <- allMovementdataCombined1 %>%
-  left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Embedded", "Buried", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
-  mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
-        Hiding = coalesce(Hiding.x, Hiding.y), 
-         Buried = coalesce(Buried.x, Buried.y), 
-         Embedded = coalesce(Embedded.x, Embedded.y)
-         ) %>% 
-  #unite is good for pasting columns together
-  unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE)
-  
   
 allMovementdataCombined2 <- allMovementdataCombined1 %>%
   mutate(Site = case_when(RiffleID == 1 ~ "Riffle 1", 
@@ -441,8 +436,8 @@ allMovementdataCombined2 <- allMovementdataCombined1 %>%
                           grepl("GA", RiffleID) ~ "GravelAug",
                           grepl("Overflow", RiffleID) ~ "Overflow"
                           ))
-# cat(names(oldMasterMovementsCombined), sep = "', '")
-# names(oldMasterMovementsCombined)
+#column names from master movement sheet: cat(names(oldMasterMovementsCombined), sep = "', '")
+
 columnNames <- c('Point', 'E', 'N', 'Elevation', 'Code', 'SurveyID', 'Year', 'Period', 'TagID', 'RiffleID', 'Site', 'TagSize_mm', 
                  'A_Axis_mm', 'B_Axis_mm', 'B_Axis_ft', 'C_Axis_mm', 'Gravelometer_mm', 'Weight_g', 'Particle_Class', 'Size_Class', 'Size_Class2', 
                  'Distance_ft', 'Distance_m', 
@@ -450,14 +445,14 @@ columnNames <- c('Point', 'E', 'N', 'Elevation', 'Code', 'SurveyID', 'Year', 'Pe
 #NA readings in Movement field are due to movements that don't occur in the correct runoff year; these will show up in cumulative movement
 allMovementdataCombined3 <- allMovementdataCombined2 %>%
   select(all_of(columnNames))
-###This is what goes in the master file for movementsCombined
-write.csv(allMovementdataCombined3, "AllMovementsCombined.csv", row.names = FALSE)
-# names(allMovementdataCombined2)
+###This is the finished df and what goes in the master file for movementsCombined. 
+#Manually copy and paste this csv into KB_Survey_PITRocks_Master_20250213,  sheet MovementData_Combined
+write.csv(allMovementdataCombined3, "OutputData/AllMovementsCombined.csv", row.names = FALSE)
 
 ####
 
 
-##QAQC
+##Optional QAQC
 x <- allMovementdataCombined3[,c("Point", "TagID", "SurveyID", "Distance_ft")] %>%
   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Distance_ft")], by = c("Point", "TagID", "SurveyID")) %>%
   #sees how the difference is between old movements and R calculated ones
