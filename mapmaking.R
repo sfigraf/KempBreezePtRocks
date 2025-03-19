@@ -5,13 +5,15 @@ AllPitRockData <- read_csv("AllPitRockData.csv") %>%
 
 library(leaflet)
 library(sf)
+#once the map is in the viewer, you can save it if you want as an itneractive html by selecting "export" -> "save as web page"
+
 # x <- allMovementdataCombined1 %>%
 #   filter(!is.na(N))
 #From GIS:
 # NAD_1983_StatePlane_Colorado_North_FIPS_0501_Feet
 # WKID: 2231 Authority: EPSG
 
-#change data to sf object in preparation for spatial join with same crs as streamNetwork
+#change data to sf object in preparation for spatial join with same crs
 surveyFieldAttributeSF1 <- st_as_sf(AllPitRockData, coords = c("E", "N"), crs = st_crs("EPSG:2231"), remove = FALSE)
 
 latLongCRS <- st_crs("+proj=longlat +datum=WGS84 +no_defs") #should be same as +init=epsg:4326
