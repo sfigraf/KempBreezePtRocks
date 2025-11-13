@@ -36,6 +36,9 @@ recapsOnly <- inner_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean"
 # but if a row has a recapID and didn't get joined, that's a problem
 #so check if this DF has any non-NAs in RecapID
 deploysAndNA <- anti_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"))
+# this will be field data that doesn't have matches in the trimble Survey Data
+deploysAndNA1 <- deploysAndNA %>%
+  filter(!is.na(RecapID))
 
 ##DEPLOYS
 #now we take out the recap instances with the deploy ID so we can just get instances of deployment
@@ -57,7 +60,7 @@ deploysSurveyInfoJoined <- deploysOnly %>%
   left_join(surveyInfo, by = c("SurveyID", "DeployID" = "Point"), keep = TRUE)
 
 ###combine recap/deploy datasets 
-# should be same amount of rows as orignal TagInfo
+# should be same amount of rows as original TagInfo
 #this is the final df that now contains recap and deployed rocks from field data with correct location data.
 allSurveyandField <- rbind(deploysSurveyInfoJoined, recapsOnly)
 #if a row doesn't have a northing and easting, it shouldn't have a point number either
@@ -71,6 +74,7 @@ nrow(
   allSurveyandField %>%
     filter(!is.na(N))
 )
+#this should be 1 more than allSurveyAndField for the NA entry
 length(unique(allSurveyandField$Point))
 #see which points are in there multiple times
 # serves to catch potential wonky scenarios and data entry mistakes 
@@ -122,8 +126,11 @@ masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Dat
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
   select(all_of(masterSheetColumns))
-#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitRocks
-write.csv(surveyFieldAttribute2, "OutputData/surveyFieldAttribute.csv", row.names = F)
+#get new data only: Filter by survey name(s). 
+newSurveyFieldData <- surveyFieldAttribute2 %>%
+  filter(SurveyID == "Relocate 2025")
+#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitRocks. Add on this new data to the sheet
+write.csv(newSurveyFieldData, "OutputData/newSurveyFieldAttribute.csv", row.names = F)
 
 
 # Optional QAQC --------------------------------------------------------------------
@@ -155,6 +162,8 @@ rel2023 <- surveyFieldAttributeSF2 %>%
   filter(SurveyID.x == "Relocate 2023")
 rel2024 <- surveyFieldAttributeSF2 %>%
   filter(SurveyID.x == "Relocate 2024")
+rel2025 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID.x == "Relocate 2025")
 
 
 leaflet() %>%
@@ -253,7 +262,25 @@ leaflet() %>%
                     )
                     #clusterOptions = markerClusterOptions()
   ) %>%
-  addLayersControl(overlayGroups = c("Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10"), 
+  addAwesomeMarkers(data = rel2025,
+                    group = "Relocate 2025",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "beige"
+                    ), 
+                    popup = paste(
+                      "Relocate 2025", "<br>", 
+                      "Relocate ID: ", rel2025$RecapID_Clean, "<br>", 
+                      "Point: ", rel2025$Point, "<br>", 
+                      "Tag ID: ", rel2025$TagID, "<br>",
+                      "N:", rel2025$N, "<br>",
+                      "E:", rel2025$E, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
+  addLayersControl(overlayGroups = c("Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10", "Relocate 2025"), 
                    baseGroups = c("OSM", "Satellite")) %>%
   addMeasure(primaryLengthUnit = "feet")
 
