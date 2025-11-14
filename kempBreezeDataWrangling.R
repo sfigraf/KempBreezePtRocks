@@ -1,13 +1,16 @@
 library(tidyverse)
 library(janitor)
+
+tagsToExclude <- c(230000111655)
 #PART 1
 # Field and Survey Data joining -------------------------------------------
 
 #fieldData
-tagInfo <- read_csv("InputData/allAfterFieldData.csv")
+tagInfo <- read_csv("InputData/allAfterFieldData.csv") %>%
+  filter(!TagID %in% tagsToExclude)
 
 ##Trimble sruvey data, exported and combined attribute tables from gis
-surveyInfo <- read_csv("InputData/allKBAfterSurveyPoints.csv") 
+surveyInfo <- read_csv("InputData/allKBAfterSurveyPoints.csv")
 
 #NOT RELEVANT FOR NEW DATA ADDING
 #get correct locations onto gravel aug and overflow# just needed to do once, 
@@ -120,12 +123,12 @@ surveyFieldAttribute1 <- surveyFieldAttribute %>%
          Particle_Class = `Particle Class`,
          Size_Class = `Size Class1`)
 #columns from master sheet ("U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\KB_Survey_PITRocks_Master_20250213.xlsx", sheet allDataPitROcks) to make it easier to transfer over in excel
-masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"TagSize_mm",	"A_Axis_mm",
+masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"Site", "TagSize_mm",	"A_Axis_mm",
 "B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class", "Field_Movement",	"Hiding",	"Embedded",	"Buried",	"allNotes")
 
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
-  select(all_of(masterSheetColumns))
+  select(all_of(masterSheetColumns)) 
 #get new data only: Filter by survey name(s). 
 newSurveyFieldData <- surveyFieldAttribute2 %>%
   filter(SurveyID == "Relocate 2025")
@@ -288,10 +291,11 @@ leaflet() %>%
 
 
 # PART 2: Movement Calculations ---------------------------------------------------
+
 #after part 1, 
 # from KB_Survey_PITRocks_Master_20250213 on U Drive, export sheet AllDataPITRocks to a csv and put in InputFiles
 #this is basically the encounter history
-AllPitRockData <- read_csv("InputData/AllPitRockData.csv")
+AllPitRockData <- read_csv("InputData/AllPitRockData_2025.csv")
 ###One Time Fix to combine notes from movement sheet with notes from new data
 #adding old notes
 #comes from old master File
@@ -327,6 +331,19 @@ allDistance <- AllPitRockData1 %>%
 # x <- allDistance %>%
 #   filter(Distance > 0,
 #          grepl("Deploy", SurveyID))
+#if there is more than 1 riffle assigned to a tag for a period, this could be a data entry error and you will get warning "Returning more (or less) than 1 row per `summarise()` group
+#so this df should be empty, if not, investigate each tag and history listed
+moreThan1Attribute <- allDistance %>%
+  group_by(TagID, Period) %>%
+  filter(n_distinct(RiffleID) > 1|
+           n_distinct(TagSize_mm) > 1|
+           n_distinct(A_Axis_mm) > 1|
+           n_distinct(B_Axis_mm) > 1|
+           n_distinct(C_Axis_mm) > 1|
+           n_distinct(Gravelometer_mm) > 1|
+           n_distinct(Weight_g) > 1|
+           n_distinct(Particle_Class) > 1|
+           n_distinct(Size_Class) > 1)
 
 #total it all up
 summaryFile <- allDistance %>%
@@ -436,13 +453,24 @@ mov2024 <- AllPitRockData1 %>%
   ) %>%
   filter(SurveyID == "Relocate 2024")
 
+###2025
+mov2025 <- AllPitRockData1 %>%
+  filter(SurveyID %in% c("Relocate 2025", "Relocate 2024")) %>%
+  mutate(Year = 2025) %>%
+  group_by(TagID) %>%
+  arrange(Date) %>%
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+  ) %>%
+  filter(SurveyID == "Relocate 2025")
+
 ###binding all back together
 allMovements = list(
   mov2019, 
   mov2020, 
   mov2021, 
   mov2023, 
-  mov2024
+  mov2024, 
+  mov2025
 )
 allMovementdataCombined <- dplyr::bind_rows(allMovements)
 #getting desired columns/format
@@ -457,7 +485,8 @@ allMovementdataCombined1 <- allMovementdataCombined %>%
          )
   
 allMovementdataCombined2 <- allMovementdataCombined1 %>%
-  mutate(Site = case_when(RiffleID == 1 ~ "Riffle 1", 
+  mutate(Site = case_when(RiffleID == 0 ~ "Riffle 0",
+                          RiffleID == 1 ~ "Riffle 1", 
                           RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
                           RiffleID == 3 ~ "Riffle 3", 
                           grepl("GA", RiffleID) ~ "GravelAug",
