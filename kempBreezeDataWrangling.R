@@ -294,7 +294,7 @@ leaflet() %>%
 # PART 2: Movement Calculations ---------------------------------------------------
 
 #after part 1, 
-# from KB_Survey_PITRocks_Master_20250213 on U Drive, export sheet AllDataPITRocks to a csv and put in InputFiles
+# from KB_Survey_PITRocks_Master_XXXXXXXX.xlsx on U Drive, export sheet AllDataPITRocks to a csv and put in InputFiles
 #this is basically the encounter history
 AllPitRockData <- read_csv("InputData/AllPitRockData.csv") %>%
   filter(!(TagID %in% tagsToExclude & Period == "After"))
@@ -505,7 +505,7 @@ columnNames <- c('Point', 'E', 'N', 'Elevation', 'Code', 'SurveyID', 'Year', 'Pe
 allMovementdataCombined3 <- allMovementdataCombined2 %>%
   select(all_of(columnNames))
 ###This is the finished df and what goes in the master file for movementsCombined. 
-#Manually copy and paste this csv into KB_Survey_PITRocks_Master_20250213,  sheet MovementData_Combined
+#Manually copy and paste this csv into KB_Survey_PITRocks_Master_XXXXXXXX.xlsx,  sheet MovementData_Combined
 write.csv(allMovementdataCombined3, "OutputData/AllMovementsCombined.csv", row.names = FALSE)
 
 ####
