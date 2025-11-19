@@ -1567,5 +1567,5 @@ NA,230000111535,NA,NA,CBL,NA,NA,Deploy 2024_10,,Trimble,Field Sheet DeployID inc
 50754,228000607541,51354,51354,64,1,Riffle 1,Relocate 2025,9/15/2025,Mobile,approximate coordinates from M3 Packraft
 50809,228000607558,51409,51409,64,2A,Riffle 2A,Relocate 2025,9/17/2025,Mobile,"approximate coordinates from M3 Backpack, previous detection from mobile packraft antenna"
 50879,228000607572,51479,51479,64,2B,Riffle 2B,Relocate 2025,9/16/2025,Mobile,"approximate coordinates from M3 Packraft, previous detection from mobile packraft antenna"
-50276,226001370219,51376,51376,,,,Relocate 2025,9/16/2025,Mobile,approximate coordinates from M4 Backpack
-50735,226001370277,51335,51335,,,,Relocate 2025,9/16/2025,Mobile,approximate coordinates from M4 Backpack
+50276,226001370219,51376,51376,32,1,Riffle 1,Relocate 2025,9/16/2025,Mobile,approximate coordinates from M4 Backpack
+50735,226001370277,51335,51335,16,1,Riffle 1,Relocate 2025,9/16/2025,Mobile,approximate coordinates from M4 Backpack
