@@ -1,13 +1,14 @@
 library(tidyverse)
 library(janitor)
 
+#as of 11/17/2025, we still want these tags to be added to the AllData_PitROcks sheet, but NOT used in movement analysis. 
+#so these tags get filtered out in the movement part of the script but not at the beginning
 tagsToExclude <- c(230000111655)
 #PART 1
 # Field and Survey Data joining -------------------------------------------
 
 #fieldData
-tagInfo <- read_csv("InputData/allAfterFieldData.csv") %>%
-  filter(!TagID %in% tagsToExclude)
+tagInfo <- read_csv("InputData/allAfterFieldData.csv") 
 
 ##Trimble sruvey data, exported and combined attribute tables from gis
 surveyInfo <- read_csv("InputData/allKBAfterSurveyPoints.csv")
@@ -39,7 +40,7 @@ recapsOnly <- inner_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean"
 # but if a row has a recapID and didn't get joined, that's a problem
 #so check if this DF has any non-NAs in RecapID
 deploysAndNA <- anti_join(tagInfo, surveyInfo, by = c("SurveyID", "RecapID_Clean" = "Point"))
-# this will be field data that doesn't have matches in the trimble Survey Data
+# this will be field data that doesn't have matches in the trimble Survey Data, should be empty
 deploysAndNA1 <- deploysAndNA %>%
   filter(!is.na(RecapID))
 
@@ -124,7 +125,7 @@ surveyFieldAttribute1 <- surveyFieldAttribute %>%
          Size_Class = `Size Class1`)
 #columns from master sheet ("U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\KB_Survey_PITRocks_Master_20250213.xlsx", sheet allDataPitROcks) to make it easier to transfer over in excel
 masterSheetColumns <- c("Point",	"E",	"N",	"Elevation",	"Code",	"SurveyID", "Date",	"Period",	"TagID",	"RiffleID",	"Site", "TagSize_mm",	"A_Axis_mm",
-"B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class", "Field_Movement",	"Hiding",	"Embedded",	"Buried",	"allNotes")
+"B_Axis_mm",	"C_Axis_mm",	"Gravelometer_mm",	"Weight_g",	"Particle_Class",	"Size_Class", "Field_Movement",	"Hiding",	"Embedded",	"Buried", "DetectionType",	"allNotes")
 
 surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
   arrange(Point) %>%
@@ -132,7 +133,7 @@ surveyFieldAttribute2 <- surveyFieldAttribute1 %>%
 #get new data only: Filter by survey name(s). 
 newSurveyFieldData <- surveyFieldAttribute2 %>%
   filter(SurveyID == "Relocate 2025")
-#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_20250213.xlsx, sheet allDataPitRocks. Add on this new data to the sheet
+#once saved as CSV, manually copy and paste this data into KB_Survey_PITRocks_Master_XXXXXXXX.xlsx, sheet allDataPitRocks. Add on this new data to the sheet
 write.csv(newSurveyFieldData, "OutputData/newSurveyFieldAttribute.csv", row.names = F)
 
 
@@ -295,7 +296,8 @@ leaflet() %>%
 #after part 1, 
 # from KB_Survey_PITRocks_Master_20250213 on U Drive, export sheet AllDataPITRocks to a csv and put in InputFiles
 #this is basically the encounter history
-AllPitRockData <- read_csv("InputData/AllPitRockData_2025.csv")
+AllPitRockData <- read_csv("InputData/AllPitRockData.csv") %>%
+  filter(!(TagID %in% tagsToExclude & Period == "After"))
 ###One Time Fix to combine notes from movement sheet with notes from new data
 #adding old notes
 #comes from old master File
@@ -380,7 +382,7 @@ summaryFile <- allDistance %>%
   relocate(Site, .after = RiffleID) %>%
   relocate(deployID)
 
-#This file gets manually copied and pasted into KB_Survey_PITRocks_Master_20250213, sheet MasterPITRockList
+#This file gets manually copied and pasted into KB_Survey_PITRocks_Master_XXXXXXXX, sheet MasterPITRockList
 write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 
@@ -389,6 +391,7 @@ write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 #######need to get distance moved by runoff year
 #manually add year in as column based off survey dates
+# if the rock doesn't have a detection from one year to the next, the movement for that runoff year is NA
 ###2019
 mov2019 <- AllPitRockData1 %>%
   filter(SurveyID %in% c("Relocate 2019", "Deploy 2019")) %>%
