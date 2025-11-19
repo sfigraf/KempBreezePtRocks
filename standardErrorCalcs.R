@@ -22,29 +22,26 @@ M4_Detections <- read_csv("InputData/Standard Error Calcs/2025 M4 Detections.csv
 HPR_Detections <- read_csv("InputData/Standard Error Calcs/2025 hpr plus detections.csv") %>%
   filter(!TagID %in% testTags)
 
-
-
-
 #separate to backpack and packraft
 M3_Detections1 <- M3_Detections %>%
-  mutate(antennaTypeM3 = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
+  mutate(antennaType = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
                                  str_detect(Antenna, "Packraft") ~ "Packraft")) %>%
-  rename(M3_N = Lat_DD, 
-         M3_E = Long_DD) %>%
-  select(TagID, M3_E, M3_N, antennaTypeM3)
+  rename(N = Lat_DD, 
+         E = Long_DD) %>%
+  select(TagID, E, N, antennaType)
 
 M4_Detections1 <- M4_Detections %>%
-  mutate(antennaTypeM4 = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
+  mutate(antennaType = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
                                    str_detect(Antenna, "Packraft") ~ "Packraft")) %>%
-  rename(M4_N = Lat_DD, 
-         M4_E = Long_DD) %>%
-  select(TagID, M4_E, M4_N, antennaTypeM4)
+  rename(N = Lat_DD, 
+         E = Long_DD) %>%
+  select(TagID, E, N, antennaType)
 
 HPR_Detections1 <- HPR_Detections %>%
-  mutate(antennaTypeHPR = "HPR+") %>%
-  rename(HPR_N = Latitude, 
-         HPR_E = Longitude) %>%
-  select(TagID, HPR_E, HPR_N, antennaTypeHPR)
+  mutate(antennaType = "HPR+") %>%
+  rename(N = Latitude, 
+         E = Longitude) %>%
+  select(TagID, E, N, antennaType)
 
 trimble2025_1 <- trimble2025 %>%
   mutate(antennaTypeTrimble = "Trimble") %>%
@@ -56,182 +53,74 @@ trimble2025_1 <- trimble2025 %>%
 #Would join them all except there's multiple entries for same tag on same survey. Could probably average these distances though at the end
 # gets difference between trimble and M3 tags and excludes tags from trimble without m3 detection
 
-########M3
-trimbleM3 <- trimble2025_1 %>%
-  left_join(M3_Detections1, by = "TagID") %>%
-  mutate(distanceDif_ft = round(sqrt((Trimble_N - M3_N)^2 + (Trimble_E - M3_E)^2), 2),
-         northingError = abs(Trimble_N - M3_N), 
-         eastingError = abs(Trimble_E - M3_E)) %>%
-  filter(!is.na(distanceDif_ft))
-
-trimbleM3Summarized <- trimbleM3 %>%
-  group_by(antennaTypeM3) %>%
-  summarise(
-    #mean
-    meanDistanceDifErrorTrimblevsM3 = round(mean(distanceDif_ft), 2), 
-            meanNorthingError = round(mean(northingError), 2),
-            meanEastingError = round(mean(eastingError), 2),
-            #min
-            minDistanceDifErrorTrimblevsM3 = round(min(distanceDif_ft), 2), 
-            minNorthingError = round(min(northingError), 2),
-            minEastingError = round(min(eastingError), 2),
-    #max
-    maxDistanceDifErrorTrimblevsM3 = round(max(distanceDif_ft), 2), 
-    maxNorthingError = round(max(northingError), 2),
-    maxEastingError = round(max(eastingError), 2),
-    #median
-    medianDistanceDifErrorTrimblevsM3 = round(median(distanceDif_ft), 2), 
-    medianNorthingError = round(median(northingError), 2),
-    medianEastingError = round(median(eastingError), 2),
-    #standard deviation
-    sdDistanceDifErrorTrimblevsM3 = round(sd(distanceDif_ft), 2), 
-    sdNorthingError = round(sd(northingError), 2),
-    sdEastingError = round(sd(eastingError), 2)
-            )
-
-# get data to final display form
-trimbleM3SummarizedFinal <- trimbleM3Summarized %>%
-  pivot_longer(
-    cols = -antennaTypeM3,
-    names_to = c("Statistic", "ErrorType"),
-    names_pattern = "(mean|min|max|median|sd)(.*)",
-    values_to = "value"
-  ) %>%
-  mutate(
-    Statistic = case_when(str_detect(Statistic, "sd") ~ "SD", 
-                       TRUE ~ Statistic),
-    ErrorType = case_when(
-      str_detect(ErrorType, "Northing") ~ "Northing Error",
-      str_detect(ErrorType, "Easting")  ~ "Easting Error",
-      str_detect(ErrorType, "Distance") ~ "Absolute Error"
+createSummaryTableFunction <- function(trimbleData = trimble2025_1, dataToCompare) {
+  #northingCol <- dataToCompare
+  trimbleJoined <- trimble2025_1 %>%
+    left_join(dataToCompare, by = "TagID") %>%
+    mutate(distanceDif_ft = round(sqrt((Trimble_N - N)^2 + (Trimble_E - E)^2), 2),
+           northingError = abs(Trimble_N - N), 
+           eastingError = abs(Trimble_E - E)) %>%
+    filter(!is.na(distanceDif_ft))
+  
+  trimbleJoinedSummarized <- trimbleJoined %>%
+    group_by(antennaType) %>%
+    summarise(
+      #mean
+      meanDistanceDifError = round(mean(distanceDif_ft), 2), 
+      meanNorthingError = round(mean(northingError), 2),
+      meanEastingError = round(mean(eastingError), 2),
+      #min
+      minDistanceDifError = round(min(distanceDif_ft), 2), 
+      minNorthingError = round(min(northingError), 2),
+      minEastingError = round(min(eastingError), 2),
+      #max
+      maxDistanceDifError = round(max(distanceDif_ft), 2), 
+      maxNorthingError = round(max(northingError), 2),
+      maxEastingError = round(max(eastingError), 2),
+      #median
+      medianDistanceDifError = round(median(distanceDif_ft), 2), 
+      medianNorthingError = round(median(northingError), 2),
+      medianEastingError = round(median(eastingError), 2),
+      #standard deviation
+      sdDistanceDifErrorTrimblevsM3 = round(sd(distanceDif_ft), 2), 
+      sdNorthingError = round(sd(northingError), 2),
+      sdEastingError = round(sd(eastingError), 2)
     )
-  ) %>%
-  #select(-antennaTypeM3) %>%
-  pivot_wider(
-    names_from = ErrorType,
-    values_from = value
-  ) %>%
-  relocate(`Absolute Error`, .after = last_col()) %>%
-  arrange(antennaTypeM3, Statistic) #factor(Statistic, levels = c("maximum","mean","median","minimum","SD"))
+  
+  # get data to final display form
+  trimbleJoinedSummarizedFinal <- trimbleJoinedSummarized %>%
+    pivot_longer(
+      cols = -antennaType,
+      names_to = c("Statistic", "ErrorType"),
+      names_pattern = "(mean|min|max|median|sd)(.*)",
+      values_to = "value"
+    ) %>%
+    mutate(
+      Statistic = case_when(str_detect(Statistic, "sd") ~ "SD", 
+                            TRUE ~ Statistic),
+      ErrorType = case_when(
+        str_detect(ErrorType, "Northing") ~ "Northing Error",
+        str_detect(ErrorType, "Easting")  ~ "Easting Error",
+        str_detect(ErrorType, "Distance") ~ "Absolute Error"
+      )
+    ) %>%
+    pivot_wider(
+      names_from = ErrorType,
+      values_from = value
+    ) %>%
+    relocate(`Absolute Error`, .after = last_col()) %>%
+    arrange(antennaType, Statistic) #factor(Statistic, levels = c("maximum","mean","median","minimum","SD"))
+  return(trimbleJoinedSummarizedFinal)
+  
+}
 
-############M4
-trimbleM4 <- trimble2025_1 %>%
-  left_join(M4_Detections1, by = "TagID") %>%
-  mutate(distanceDif_ft = round(sqrt((Trimble_N - M4_N)^2 + (Trimble_E - M4_E)^2), 2),
-         northingError = abs(Trimble_N - M4_N), 
-         eastingError = abs(Trimble_E - M4_E)) %>%
-  filter(!is.na(distanceDif_ft))
-
-trimbleM4Summarized <- trimbleM4 %>%
-  group_by(antennaTypeM4) %>%
-  summarise(
-    #mean
-    meanDistanceDifErrorTrimblevsM4 = round(mean(distanceDif_ft), 2), 
-    meanNorthingError = round(mean(northingError), 2),
-    meanEastingError = round(mean(eastingError), 2),
-    #min
-    minDistanceDifErrorTrimblevsM4 = round(min(distanceDif_ft), 2), 
-    minNorthingError = round(min(northingError), 2),
-    minEastingError = round(min(eastingError), 2),
-    #max
-    maxDistanceDifErrorTrimblevsM4 = round(max(distanceDif_ft), 2), 
-    maxNorthingError = round(max(northingError), 2),
-    maxEastingError = round(max(eastingError), 2),
-    #median
-    medianDistanceDifErrorTrimblevsM4 = round(median(distanceDif_ft), 2), 
-    medianNorthingError = round(median(northingError), 2),
-    medianEastingError = round(median(eastingError), 2),
-    #standard deviation
-    sdDistanceDifErrorTrimblevsM4 = round(sd(distanceDif_ft), 2), 
-    sdNorthingError = round(sd(northingError), 2),
-    sdEastingError = round(sd(eastingError), 2)
-  )
+allData <- list(trimblevsM3SummarizedFinal = createSummaryTableFunction(dataToCompare =  M3_Detections1), 
+                trimblevsM4SummarizedFinal = createSummaryTableFunction(dataToCompare =  M4_Detections1), 
+                trimblevsHPRSummarizedFinal = createSummaryTableFunction(dataToCompare =  HPR_Detections1))
+write_xlsx(allData, "OutputData/StandardErrorCalculations/errorSummarizedDFs2025.xlsx")  
 
 
-# get table to final form
-trimbleM4SummarizedFinal <- trimbleM4Summarized %>%
-  pivot_longer(
-    cols = -antennaTypeM4,
-    names_to = c("Statistic", "ErrorType"),
-    names_pattern = "(mean|min|max|median|sd)(.*)",
-    values_to = "value"
-  ) %>%
-  mutate(Statistic = case_when(str_detect(Statistic, "sd") ~ "SD", 
-                               TRUE ~ Statistic),
-    ErrorType = case_when(
-      str_detect(ErrorType, "Northing") ~ "Northing Error",
-      str_detect(ErrorType, "Easting")  ~ "Easting Error",
-      str_detect(ErrorType, "Distance") ~ "Absolute Error"
-    )
-  ) %>%
-  #select(-antennaTypeM4) %>%
-  pivot_wider(
-    names_from = ErrorType,
-    values_from = value
-  ) %>%
-  relocate(`Absolute Error`, .after = last_col()) %>%
-  arrange(antennaTypeM4, Statistic) #factor(Statistic, levels = c("maximum","mean","median","minimum","SD"))
-########### HPR
-trimbleHPR <- trimble2025_1 %>%
-  left_join(HPR_Detections1, by = "TagID") %>%
-  mutate(distanceDif_ft = round(sqrt((Trimble_N - HPR_N)^2 + (Trimble_E - HPR_E)^2), 2),
-         northingError = abs(Trimble_N - HPR_N), 
-         eastingError = abs(Trimble_E - HPR_E)) %>%
-  filter(!is.na(distanceDif_ft))
-
-trimbleHPRSummarized <- trimbleHPR %>%
-  group_by(antennaTypeHPR) %>%
-  summarise(
-    #mean
-    meanDistanceDifErrorTrimblevsHPR = round(mean(distanceDif_ft), 2), 
-    meanNorthingError = round(mean(northingError), 2),
-    meanEastingError = round(mean(eastingError), 2),
-    #min
-    minDistanceDifErrorTrimblevsHPR = round(min(distanceDif_ft), 2), 
-    minNorthingError = round(min(northingError), 2),
-    minEastingError = round(min(eastingError), 2),
-    #max
-    maxDistanceDifErrorTrimblevsHPR = round(max(distanceDif_ft), 2), 
-    maxNorthingError = round(max(northingError), 2),
-    maxEastingError = round(max(eastingError), 2),
-    #median
-    medianDistanceDifErrorTrimblevsHPR = round(median(distanceDif_ft), 2), 
-    medianNorthingError = round(median(northingError), 2),
-    medianEastingError = round(median(eastingError), 2),
-    #standard deviation
-    sdDistanceDifErrorTrimblevsHPR = round(sd(distanceDif_ft), 2), 
-    sdNorthingError = round(sd(northingError), 2),
-    sdEastingError = round(sd(eastingError), 2)
-  )
-##get final table for display
-# Pivot the data into long format
-trimbleHPRSummarizedFinal <- trimbleHPRSummarized %>%
-  pivot_longer(
-    cols = -antennaTypeHPR,
-    names_to = c("Statistic", "ErrorType"),
-    names_pattern = "(mean|min|max|median|sd)(.*)",
-    values_to = "value"
-  ) %>%
-  mutate(
-    Statistic = case_when(str_detect(Statistic, "sd") ~ "SD", 
-                          TRUE ~ Statistic),
-    ErrorType = case_when(
-      str_detect(ErrorType, "Northing") ~ "Northing Error",
-      str_detect(ErrorType, "Easting")  ~ "Easting Error",
-      str_detect(ErrorType, "Distance") ~ "Absolute Error"
-    )
-  ) %>%
-  pivot_wider(
-    names_from = ErrorType,
-    values_from = value
-  ) %>%
-  relocate(`Absolute Error`, .after = last_col()) %>%
-  arrange(antennaTypeHPR, Statistic) #factor(Statistic, levels = c("maximum","mean","median","minimum","SD"))
-########## saviong data
-
-allData <- list(trimbleM3SummarizedFinal =trimbleM3SummarizedFinal, 
-                trimbleM4SummarizedFinal = trimbleM4SummarizedFinal, 
-                trimbleHPRSummarizedFinal = trimbleHPRSummarizedFinal)
-write_xlsx(allData, "errorSummarizedDFs2025.xlsx")  
-
+#getting just backpack error across m3 and m4
+trimbleM3backpack <- trimbleM3 %>%
+  filter(antennaTypeM3 == "Backpack")
 
