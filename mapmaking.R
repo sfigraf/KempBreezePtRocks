@@ -7,8 +7,8 @@ library(leaflet)
 library(sf)
 #once the map is in the viewer, you can save it if you want as an itneractive html by selecting "export" -> "save as web page"
 
-# x <- allMovementdataCombined1 %>%
-#   filter(!is.na(N))
+AllPitRockData <- allDistance %>%
+  filter(TagID %in% tagsMobile2025)
 #From GIS:
 # NAD_1983_StatePlane_Colorado_North_FIPS_0501_Feet
 # WKID: 2231 Authority: EPSG
@@ -39,6 +39,8 @@ rel2023 <- surveyFieldAttributeSF2 %>%
   filter(SurveyID == "Relocate 2023")
 rel2024 <- surveyFieldAttributeSF2 %>%
   filter(SurveyID == "Relocate 2024")
+rel2025 <- surveyFieldAttributeSF2 %>%
+  filter(SurveyID == "Relocate 2025")
 
 
 leaflet() %>%
@@ -201,7 +203,29 @@ leaflet() %>%
                     )
                     #clusterOptions = markerClusterOptions()
   ) %>%
+  addAwesomeMarkers(data = rel2025,
+                    group = "Relocate 2025",
+                    icon = leaflet::awesomeIcons(
+                      icon = 'add',
+                      library = 'ion',
+                      #iconHeight = 20,
+                      markerColor = "beige"
+                    ), 
+                    popup = paste(
+                      "Relocate 2025", "<br>", 
+                      "Deploy ID: ", rel2025$Point, "<br>", 
+                      "Tag ID: ", rel2025$TagID, "<br>",
+                      "N:", rel2025$N, "<br>",
+                      "E:", rel2025$E, "<br>", 
+                      "Distance:", rel2025$Distance, "<br>"
+                    )
+                    #clusterOptions = markerClusterOptions()
+  ) %>%
   addLayersControl(overlayGroups = c("Deploy 2019", "Relocate 2019", "Relocate 2020", "Relocate 2022",
-                                     "Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10"), 
+                                     "Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Relocate 2024", "Deploy 2024_10", "Relocate 2025"), 
                    baseGroups = c("OSM", "Satellite")) %>%
+  hideGroup(c("Deploy 2019", "Relocate 2019", "Relocate 2020", "Relocate 2022",
+              "Deploy 2023", "Relocate 2023", "Deploy 2024_04", "Deploy 2024_10"))
   addMeasure(primaryLengthUnit = "feet")
+
+
