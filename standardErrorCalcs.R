@@ -1,0 +1,186 @@
+###mobile/trimble comparison
+#standard error calculation
+library(tidyverse)
+library(writexl)
+#test tags for exclusion copied and pasted from "U:\Projects\Colorado_River\Kemp_Breeze_SWA\Data\Sediment\PIT_Tagged_Rocks\Data\Detections\KB_PITRocks_AllDetections_2025_09.xlsx"
+testTags <- c(226001546996, 226001581072, 230000004000, 230000087405,
+              230000087408, 230000102750, 230000228791, 230000142503)
+
+# need to bring in all trimble field data from 2025
+trimble2025 <- read_csv("InputData/AllPitRockData.csv") %>%
+  filter(SurveyID == "Relocate 2025", 
+         DetectionType == "Trimble", 
+         !TagID %in% testTags)
+#all m3 from 2025
+M3_Detections <- read_csv("InputData/Standard Error Calcs/2025 M3 Detections.csv") %>%
+  filter(!TagID %in% testTags)
+# all m4 from 2025
+M4_Detections <- read_csv("InputData/Standard Error Calcs/2025 M4 Detections.csv") %>%
+  filter(!TagID %in% testTags)
+
+#all hpr from 2025
+HPR_Detections <- read_csv("InputData/Standard Error Calcs/2025 hpr plus detections.csv") %>%
+  filter(!TagID %in% testTags)
+
+#separate to backpack and packraft
+M3_Detections1 <- M3_Detections %>%
+  mutate(antennaType = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
+                                 str_detect(Antenna, "Packraft") ~ "Packraft")) %>%
+  rename(N = Lat_DD, 
+         E = Long_DD) %>%
+  select(TagID, E, N, antennaType)
+
+M4_Detections1 <- M4_Detections %>%
+  mutate(antennaType = case_when(str_detect(Antenna, "Backpack") ~ "Backpack", 
+                                   str_detect(Antenna, "Packraft") ~ "Packraft")) %>%
+  rename(N = Lat_DD, 
+         E = Long_DD) %>%
+  select(TagID, E, N, antennaType)
+
+HPR_Detections1 <- HPR_Detections %>%
+  mutate(antennaType = "HPR+") %>%
+  rename(N = Latitude, 
+         E = Longitude) %>%
+  select(TagID, E, N, antennaType)
+
+trimble2025_1 <- trimble2025 %>%
+  mutate(antennaTypeTrimble = "Trimble") %>%
+  rename(Trimble_N = N, 
+         Trimble_E = E) %>%
+  select(TagID, Trimble_E, Trimble_N, antennaTypeTrimble)
+
+##starting with standard error against m3.
+#Would join them all except there's multiple entries for same tag on same survey. Could probably average these distances though at the end
+# gets difference between trimble and M3 tags and excludes tags from trimble without m3 detection
+###16 rows were removed by filtering out the is.na(distancedif_ft) for 2024 data
+#37 rows more removed for du0duplicate entries
+
+
+createSummaryTableFunction <- function(trimbleData = trimble2025_1, dataToCompare, groupAntennaType = TRUE) {
+  
+  trimbleJoined <- trimbleData %>%
+    left_join(dataToCompare, by = "TagID") %>%
+    mutate(distanceDif_ft = round(sqrt((Trimble_N - N)^2 + (Trimble_E - E)^2), 2),
+           northingError = abs(Trimble_N - N), 
+           eastingError = abs(Trimble_E - E)) %>%
+    filter(!is.na(distanceDif_ft)) %>%
+    distinct(TagID, distanceDif_ft, antennaType, .keep_all = TRUE)
+  
+  if(groupAntennaType) {
+    trimbleJoined <- trimbleJoined %>%
+      group_by(antennaType)
+  }
+  trimbleJoinedSummarized <- trimbleJoined %>%
+    summarise(
+      #mean
+      meanDistanceDifError = round(mean(distanceDif_ft), 2), 
+      meanNorthingError = round(mean(northingError), 2),
+      meanEastingError = round(mean(eastingError), 2),
+      #min
+      minDistanceDifError = round(min(distanceDif_ft), 2), 
+      minNorthingError = round(min(northingError), 2),
+      minEastingError = round(min(eastingError), 2),
+      #max
+      maxDistanceDifError = round(max(distanceDif_ft), 2), 
+      maxNorthingError = round(max(northingError), 2),
+      maxEastingError = round(max(eastingError), 2),
+      #median
+      medianDistanceDifError = round(median(distanceDif_ft), 2), 
+      medianNorthingError = round(median(northingError), 2),
+      medianEastingError = round(median(eastingError), 2),
+      #standard deviation
+      sdDistanceDifErrorTrimblevsM3 = round(sd(distanceDif_ft), 2), 
+      sdNorthingError = round(sd(northingError), 2),
+      sdEastingError = round(sd(eastingError), 2)
+    )
+  
+  if(!groupAntennaType) {
+    trimbleJoinedSummarized <- trimbleJoinedSummarized %>%
+      mutate(antennaType = "AllMobileCombined")
+  }
+  # get data to final display form
+  trimbleJoinedSummarizedFinal <- trimbleJoinedSummarized %>%
+    pivot_longer(
+      cols = -antennaType,
+      names_to = c("Statistic", "ErrorType"),
+      names_pattern = "(mean|min|max|median|sd)(.*)",
+      values_to = "value"
+    ) %>%
+    mutate(
+      Statistic = case_when(str_detect(Statistic, "sd") ~ "SD", 
+                            TRUE ~ Statistic),
+      ErrorType = case_when(
+        str_detect(ErrorType, "Northing") ~ "Northing Error",
+        str_detect(ErrorType, "Easting")  ~ "Easting Error",
+        str_detect(ErrorType, "Distance") ~ "Absolute Error"
+      )
+    ) %>%
+    pivot_wider(
+      names_from = ErrorType,
+      values_from = value
+    ) %>%
+    relocate(`Absolute Error`, .after = last_col()) %>%
+    arrange(antennaType, Statistic) #factor(Statistic, levels = c("maximum","mean","median","minimum","SD"))
+  
+  dataToReturn = list(
+    trimbleJoined = trimbleJoined, 
+    trimbleJoinedSummarizedFinal = trimbleJoinedSummarizedFinal
+  )
+  return(dataToReturn)
+  
+}
+
+# save all
+trimblevsM3 = createSummaryTableFunction(dataToCompare =  M3_Detections1)
+trimblevsM4 = createSummaryTableFunction(dataToCompare =  M4_Detections1)
+trimblevsHPR = createSummaryTableFunction(dataToCompare =  HPR_Detections1)
+allMobile <- rbind(M3_Detections1, M4_Detections1)
+allmobileNoGroup <- createSummaryTableFunction(dataToCompare = allMobile, groupAntennaType = FALSE)
+allmobileGroup <- createSummaryTableFunction(dataToCompare = allMobile)
+allData <- list(trimblevsAllMobile = allmobileNoGroup$trimbleJoinedSummarizedFinal,
+                trimblevsAllMobileByGroup = allmobileGroup$trimbleJoinedSummarizedFinal,
+                allOVerlappingTrimbleMobile = allmobileGroup$trimbleJoined,
+
+                trimblevsM3SummarizedFinal = trimblevsM3$trimbleJoinedSummarizedFinal,
+                trimblevsM3All = trimblevsM3$trimbleJoined,
+                trimblevsM4SummarizedFinal = trimblevsM4$trimbleJoinedSummarizedFinal,
+                trimblevsM4All = trimblevsM4$trimbleJoined,
+                trimblevsHPRSummarizedFinal = trimblevsHPR$trimbleJoinedSummarizedFinal,
+                trimblevsHPRAll = trimblevsHPR$trimbleJoined
+                )
+
+write_xlsx(allData, "OutputData/StandardErrorCalculations/errorSummarizedDFs2025.xlsx") 
+
+
+########## 2024
+
+# need to bring in all trimble field data from 2025
+trimble2024 <- read_csv("InputData/AllPitRockData.csv") %>%
+  filter(SurveyID == "Relocate 2024", 
+         DetectionType == "Trimble", 
+         !TagID %in% testTags)
+#all m3 and m4 detections from 2024
+M34_Detections <- read_csv("InputData/Standard Error Calcs/m34Detections2024.csv") %>%
+  filter(!TagID %in% testTags)
+
+M34_Detections1 <- M34_Detections %>%
+  rename(N = Lat_DD, 
+         E = Long_DD, 
+         antennaType = Antenna) %>%
+  select(TagID, E, N, antennaType)
+
+trimble2024_1 <- trimble2024 %>%
+  mutate(antennaTypeTrimble = "Trimble") %>%
+  rename(Trimble_N = N, 
+         Trimble_E = E) %>%
+  select(TagID, Trimble_E, Trimble_N, antennaTypeTrimble)
+
+m34SummarizedM3vsM4 <- createSummaryTableFunction(trimbleData = trimble2024_1, M34_Detections1, groupAntennaType = TRUE)
+m34SummarizedAll <- createSummaryTableFunction(trimbleData = trimble2024_1, M34_Detections1, groupAntennaType = FALSE)
+
+data2024 <- list(trimblevsAllMobileSummarized = m34SummarizedAll$trimbleJoinedSummarizedFinal, 
+                 trimblevsMobileGrouped = m34SummarizedM3vsM4$trimbleJoinedSummarizedFinal, 
+                 trimblesvMobileAll = m34SummarizedAll$trimbleJoined
+                 )
+write_xlsx(data2024, "OutputData/StandardErrorCalculations/errorSummarizedDFs2024.xlsx") 
+
