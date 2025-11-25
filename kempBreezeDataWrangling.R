@@ -382,6 +382,18 @@ summaryFile <- allDistance %>%
   relocate(Site, .after = RiffleID) %>%
   relocate(deployID)
 
+####Mobile tags standard error exclusion
+#based of calculations in standardErrorCalcs.R and discussions with Eric Richer, decided to use 50 ft as error
+#so for rocks with mobile-only detection, if they moved less than 50 ft, exclude them from the analysis
+mobileStandardErrorValue <- 50
+#some tags were detected more than once on mobile so there may be duplicates until Unique
+mobileOnlyTags <- AllPitRockData[which(AllPitRockData$DetectionType == "Mobile"), "TagID"]
+mobileOnlyTags <- unique(mobileOnlyTags$TagID)
+
+mobileTagsSummary <- summaryFile %>%
+  filter(TagID %in% mobileOnlyTags, 
+         Period == "After", 
+         totalDistance_ft > 50)
 #This file gets manually copied and pasted into KB_Survey_PITRocks_Master_XXXXXXXX, sheet MasterPITRockList
 write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
@@ -458,7 +470,7 @@ mov2024 <- AllPitRockData1 %>%
 
 ###2025
 mov2025 <- AllPitRockData1 %>%
-  filter(SurveyID %in% c("Relocate 2025", "Relocate 2024")) %>%
+  filter(SurveyID %in% c("Relocate 2025", "Relocate 2024", "Deploy 2024_10")) %>%
   mutate(Year = 2025) %>%
   group_by(TagID) %>%
   arrange(Date) %>%
