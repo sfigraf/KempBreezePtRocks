@@ -482,6 +482,17 @@ allDistance <- AllPitRockData1 %>%
          #D_ft = round(Distance * 3.28084, 2)
   ) #%>%
 #####Now I ned to filter out for mobile detections
+mobileRowsToRemove <- allDistance %>%
+    filter(DetectionType == "Mobile", 
+           Period == "After",
+           Distance < mobileStandardErrorValue
+    )
+
+allDistanceMobileCorrected <- allDistance %>%
+  anti_join(mobileRowsToRemove)
+
+
+
 #QAQC: seeing if any "Deploy" data got distances associated
 #this df should be empty
 # x <- allDistance %>%
@@ -489,7 +500,7 @@ allDistance <- AllPitRockData1 %>%
 #          grepl("Deploy", SurveyID))
 #if there is more than 1 riffle assigned to a tag for a period, this could be a data entry error and you will get warning "Returning more (or less) than 1 row per `summarise()` group
 #so this df should be empty, if not, investigate each tag and history listed
-moreThan1Attribute <- allDistance %>%
+moreThan1Attribute <- allDistanceMobileCorrected %>%
   group_by(TagID, Period) %>%
   filter(n_distinct(RiffleID) > 1|
            n_distinct(TagSize_mm) > 1|
@@ -553,7 +564,7 @@ summaryFile <- allDistance %>%
 #   mutate(totalDistance_ft = if_else(TagID %in% mobileTagsWithinError & Period == "After", NA, totalDistance_ft), 
 #          Notes = if_else(TagID %in% mobileTagsWithinError & Period == "After", "Mobile Only detection within standard error range (50 ft). Ommitted from analysis.", ""))
 #This file gets manually copied and pasted into KB_Survey_PITRocks_Master_XXXXXXXX, sheet MasterPITRockList
-write.csv(summaryFileMobileCorrected, "OutputData/MasterPITRockList.csv", row.names = FALSE)
+write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 
 ##Optional QAQC
