@@ -302,14 +302,112 @@ leaflet() %>%
 AllPitRockData <- read_csv("InputData/AllPitRockData.csv") %>%
   filter(!(TagID %in% tagsToExclude & Period == "After"))
 
-#######need to get distance moved by runoff year
-#manually add year in as column based off survey dates
-# if the rock doesn't have a detection from one year to the next, the movement for that runoff year is NA
-
 AllPitRockData1 <- AllPitRockData %>%
   mutate(Date = mdy(Date)) %>%
   #grepl rather than == gets pitrck? entries. maybe should delete question mark in data
   filter(grepl("PITRCK", Code))
+
+###One Time Fix to combine notes from movement sheet with notes from new data
+#adding old notes
+#comes from old master File
+# oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
+# combinedNotes <- AllPitRockData %>%
+#   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Buried", "Embedded", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
+#   mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
+#          Hiding = coalesce(Hiding.x, Hiding.y), 
+#          Buried = coalesce(Buried.x, Buried.y), 
+#          Embedded = coalesce(Embedded.x, Embedded.y)
+#   ) %>% 
+#   unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) %>%
+#   select(all_of(names(AllPitRockData)))
+# write.csv(combinedNotes, "AllPitRockDataAllNotes.csv", row.names = F)
+
+#QAQC: these df rows should be equal, since we're removing mobile rows
+### TOTAL cumulative distance by period
+#get distance between found/deploy and next found
+allDistance <- AllPitRockData1 %>%
+  group_by(TagID, Period) %>%
+  arrange(Date) %>%
+  #this projection is in feet so it doesn't need a conversion
+  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
+         #TimePeriodDuration = paste(lag(Date), Date, sep = " - ")
+         #D_ft = round(Distance * 3.28084, 2)
+  ) #%>%
+####Mobile tags standard error exclusion
+#based of calculations in standardErrorCalcs.R and discussions with Eric Richer, decided to use 50 ft as error
+#so for rocks with mobile-only detection, if they moved less than 50 ft, exclude them from the analysis
+mobileRowsToRemove <- allDistance %>%
+  filter(DetectionType == "Mobile", 
+         Period == "After",
+         Distance < mobileStandardErrorValue
+  )
+
+allDistanceMobileCorrected <- allDistance %>%
+  anti_join(mobileRowsToRemove)
+
+
+#QAQC: seeing if any "Deploy" data got distances associated
+#this df should be empty
+# x <- allDistance %>%
+#   filter(Distance > 0,
+#          grepl("Deploy", SurveyID))
+#if there is more than 1 riffle assigned to a tag for a period, this could be a data entry error and you will get warning "Returning more (or less) than 1 row per `summarise()` group
+#so this df should be empty, if not, investigate each tag and history listed
+moreThan1Attribute <- allDistanceMobileCorrected %>%
+  group_by(TagID, Period) %>%
+  filter(n_distinct(RiffleID) > 1|
+           n_distinct(TagSize_mm) > 1|
+           n_distinct(A_Axis_mm) > 1|
+           n_distinct(B_Axis_mm) > 1|
+           n_distinct(C_Axis_mm) > 1|
+           n_distinct(Gravelometer_mm) > 1|
+           n_distinct(Weight_g) > 1|
+           n_distinct(Particle_Class) > 1|
+           n_distinct(Size_Class) > 1)
+
+#total it all up
+summaryFile <- allDistanceMobileCorrected %>%
+  group_by(TagID, Period) %>%
+  arrange(Date) %>%
+  summarize(
+    #keep atribute cols
+    RiffleID = unique(RiffleID),
+    TagSize_mm = unique(TagSize_mm),
+    A_Axis_mm = unique(A_Axis_mm),
+    B_Axis_mm = unique(B_Axis_mm),
+    C_Axis_mm = unique(C_Axis_mm),
+    Gravelometer_mm = unique(Gravelometer_mm),
+    Weight_g = unique(Weight_g),
+    Particle_Class = unique(Particle_Class),
+    Size_Class = unique(Size_Class),
+    totalDistance_ft = sum(Distance, na.rm = T), 
+    movementDuration = paste(first(Date), last(Date), sep = " to "),
+    #first date should always be deploy date
+    DeployDate = first(Date), 
+    #plyr ifelse preserves Date type
+    LastRecapDate = dplyr::if_else(last(Date) == first(Date), NA, last(Date)), 
+    
+    #takes from column Point where min date is 
+    deployID = Point[which.min(Date)]
+  ) %>%
+  mutate(Site = case_when(RiffleID == 0 ~ "Riffle 0", 
+                          RiffleID == 1 ~ "Riffle 1", 
+                          RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
+                          RiffleID == 3 ~ "Riffle 3", 
+                          grepl("GA", RiffleID) ~ "GravelAug",
+                          grepl("Overflow", RiffleID) ~ "Overflow"
+  )) %>%
+  relocate(Site, .after = RiffleID) %>%
+  relocate(deployID)
+
+write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
+
+
+# Part 3 ------------------------------------------------------------------
+
+#######need to get distance moved by runoff year
+#manually add year in as column based off survey dates
+# if the rock doesn't have a detection from one year to the next, the movement for that runoff year is NA
 
 ###2019
 mov2019 <- AllPitRockData1 %>%
@@ -354,9 +452,7 @@ mov2023 <- AllPitRockData1 %>%
 #for known data already, this df should be the same number of rows as data already in master file
 mov2023QAQC <- mov2023 %>%
   filter(!is.na(Distance))
-# 
-# test <- x2023Distance %>%
-#   filter(SurveyID %in% c("Relocate 2023"))
+
 ###OPTIONAL QAQC
 #this is a list of tags from 2023 movement list master that had movements according to eric. 
 #good for QAQC to see potentially which tags didn't get entered in the datasheet
@@ -395,13 +491,6 @@ allMovements = list(
   mov2025
 )
 allMovementdataCombined <- dplyr::bind_rows(allMovements)
-# x <- allMovementdataCombined %>%
-#   group_by(TagID, Period) %>%
-#   summarise(totalDistance_ft_allMoves = sum(Distance, na.rm = TRUE))
-# 
-# difs <- summaryFile %>%
-#   left_join(x, by = c("TagID", "Period")) %>%
-#   mutate(same = totalDistance_ft == totalDistance_ft_allMoves)
 
 ###find rows/ instances where movement was greater than 50m for mobile and omit that row from the analysis
 ######FOR TOMRROW: CANT just have it by runoff year, 
@@ -410,7 +499,7 @@ allMovementdataCombinedMobileCorrected <- allMovementdataCombined %>%
                            TRUE ~ Notes), 
          Distance = case_when(DetectionType == "Mobile" & Period == "After" & Distance < mobileStandardErrorValue ~ NA, 
                               TRUE ~ Distance) 
-         )
+  )
 
 #getting desired columns/format
 allMovementdataCombined1 <- allMovementdataCombinedMobileCorrected %>%
@@ -421,8 +510,8 @@ allMovementdataCombined1 <- allMovementdataCombinedMobileCorrected %>%
          B_Axis_ft = B_Axis_mm * 0.00328084, 
          Moved_1PD = ifelse(Distance_ft > B_Axis_ft, 1, 0), 
          Moved_2PD = ifelse(Distance_ft > 2*B_Axis_ft, 1, 0)
-         )
-  
+  )
+
 allMovementdataCombined2 <- allMovementdataCombined1 %>%
   mutate(Site = case_when(RiffleID == 0 ~ "Riffle 0",
                           RiffleID == 1 ~ "Riffle 1", 
@@ -430,7 +519,7 @@ allMovementdataCombined2 <- allMovementdataCombined1 %>%
                           RiffleID == 3 ~ "Riffle 3", 
                           grepl("GA", RiffleID) ~ "GravelAug",
                           grepl("Overflow", RiffleID) ~ "Overflow"
-                          ))
+  ))
 #column names from master movement sheet: cat(names(oldMasterMovementsCombined), sep = "', '")
 
 columnNames <- c('Point', 'E', 'N', 'Elevation', 'Code', 'SurveyID', 'Year', 'Period', 'TagID', 'RiffleID', 'Site', 'TagSize_mm', 
@@ -446,125 +535,6 @@ write.csv(allMovementdataCombined3, "OutputData/AllMovementsCombined.csv", row.n
 
 
 
-# Part 3 ------------------------------------------------------------------
-
-###One Time Fix to combine notes from movement sheet with notes from new data
-#adding old notes
-#comes from old master File
-# oldMasterMovementsCombined <- read_csv("oldMasterMovementsCombined.csv")
-# combinedNotes <- AllPitRockData %>%
-#   left_join(oldMasterMovementsCombined[,c("Point", "TagID", "SurveyID", "Field_Movement", "Hiding", "Buried", "Embedded", "Notes")], by = c("Point", "TagID", "SurveyID")) %>%
-#   mutate(Field_Movement = coalesce(Field_Movement.x, Field_Movement.y),
-#          Hiding = coalesce(Hiding.x, Hiding.y), 
-#          Buried = coalesce(Buried.x, Buried.y), 
-#          Embedded = coalesce(Embedded.x, Embedded.y)
-#   ) %>% 
-#   unite("Notes", c("Notes.x", "Notes.y"), sep = ". ",  na.rm = TRUE) %>%
-#   select(all_of(names(AllPitRockData)))
-# write.csv(combinedNotes, "AllPitRockDataAllNotes.csv", row.names = F)
-#remove mobile only detections 
-# mobileMovementsBelowError <- allMovementdataCombined %>%
-#   filter(DetectionType == "Mobile", Period == "After",
-#          Distance < mobileStandardErrorValue
-#   ) 
-# AllPitRockData2 <- AllPitRockData1 %>%
-#   anti_join(mobileMovementsBelowError)
-#QAQC: these df rows should be equal, since we're removing mobile rows
-nrow(AllPitRockData1) - nrow(mobileMovementsBelowError) == nrow(AllPitRockData2)
-### TOTAL cumulative distance by period
-#get distance between found/deploy and next found
-allDistance <- AllPitRockData1 %>%
-  group_by(TagID, Period) %>%
-  arrange(Date) %>%
-  #this projection is in feet so it doesn't need a conversion
-  mutate(Distance = round(sqrt((N - lag(N))^2 + (E - lag(E))^2), 2)
-         #TimePeriodDuration = paste(lag(Date), Date, sep = " - ")
-         #D_ft = round(Distance * 3.28084, 2)
-  ) #%>%
-#####Now I ned to filter out for mobile detections
-mobileRowsToRemove <- allDistance %>%
-    filter(DetectionType == "Mobile", 
-           Period == "After",
-           Distance < mobileStandardErrorValue
-    )
-
-allDistanceMobileCorrected <- allDistance %>%
-  anti_join(mobileRowsToRemove)
-
-
-
-#QAQC: seeing if any "Deploy" data got distances associated
-#this df should be empty
-# x <- allDistance %>%
-#   filter(Distance > 0,
-#          grepl("Deploy", SurveyID))
-#if there is more than 1 riffle assigned to a tag for a period, this could be a data entry error and you will get warning "Returning more (or less) than 1 row per `summarise()` group
-#so this df should be empty, if not, investigate each tag and history listed
-moreThan1Attribute <- allDistanceMobileCorrected %>%
-  group_by(TagID, Period) %>%
-  filter(n_distinct(RiffleID) > 1|
-           n_distinct(TagSize_mm) > 1|
-           n_distinct(A_Axis_mm) > 1|
-           n_distinct(B_Axis_mm) > 1|
-           n_distinct(C_Axis_mm) > 1|
-           n_distinct(Gravelometer_mm) > 1|
-           n_distinct(Weight_g) > 1|
-           n_distinct(Particle_Class) > 1|
-           n_distinct(Size_Class) > 1)
-
-#total it all up
-summaryFile <- allDistance %>%
-  group_by(TagID, Period) %>%
-  arrange(Date) %>%
-  summarize(
-    #keep atribute cols
-    RiffleID = unique(RiffleID),
-    TagSize_mm = unique(TagSize_mm),
-    A_Axis_mm = unique(A_Axis_mm),
-    B_Axis_mm = unique(B_Axis_mm),
-    C_Axis_mm = unique(C_Axis_mm),
-    Gravelometer_mm = unique(Gravelometer_mm),
-    Weight_g = unique(Weight_g),
-    Particle_Class = unique(Particle_Class),
-    Size_Class = unique(Size_Class),
-    totalDistance_ft = sum(Distance, na.rm = T), 
-    movementDuration = paste(first(Date), last(Date), sep = " to "),
-    #first date should always be deploy date
-    DeployDate = first(Date), 
-    #plyr ifelse preserves Date type
-    LastRecapDate = dplyr::if_else(last(Date) == first(Date), NA, last(Date)), 
-    
-    #takes from column Point where min date is 
-    deployID = Point[which.min(Date)]
-  ) %>%
-  mutate(Site = case_when(RiffleID == 0 ~ "Riffle 0", 
-                          RiffleID == 1 ~ "Riffle 1", 
-                          RiffleID %in% c("2A", "2B", "2") ~ "Riffle 2", 
-                          RiffleID == 3 ~ "Riffle 3", 
-                          grepl("GA", RiffleID) ~ "GravelAug",
-                          grepl("Overflow", RiffleID) ~ "Overflow"
-  )) %>%
-  relocate(Site, .after = RiffleID) %>%
-  relocate(deployID)
-
-####Mobile tags standard error exclusion
-#based of calculations in standardErrorCalcs.R and discussions with Eric Richer, decided to use 50 ft as error
-#so for rocks with mobile-only detection, if they moved less than 50 ft, exclude them from the analysis
-
-#some tags were detected more than once on mobile so there may be duplicates until Unique
-# mobileOnlyTags <- AllPitRockData[which(AllPitRockData$DetectionType == "Mobile"), "TagID"]
-# mobileOnlyTags <- unique(mobileOnlyTags$TagID)
-# 
-# mobileTagsSummary <- summaryFile %>%
-#   filter(TagID %in% mobileOnlyTags, 
-#          Period == "After", 
-#          totalDistance_ft < 50)
-# mobileTagsWithinError <- mobileTagsSummary$TagID
-# summaryFileMobileCorrected <- summaryFile %>%
-#   mutate(totalDistance_ft = if_else(TagID %in% mobileTagsWithinError & Period == "After", NA, totalDistance_ft), 
-#          Notes = if_else(TagID %in% mobileTagsWithinError & Period == "After", "Mobile Only detection within standard error range (50 ft). Ommitted from analysis.", ""))
-#This file gets manually copied and pasted into KB_Survey_PITRocks_Master_XXXXXXXX, sheet MasterPITRockList
-write.csv(summaryFile, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
 
 ##Optional QAQC
