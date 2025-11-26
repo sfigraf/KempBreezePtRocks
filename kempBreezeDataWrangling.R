@@ -404,6 +404,7 @@ allMovementdataCombined <- dplyr::bind_rows(allMovements)
 #   mutate(same = totalDistance_ft == totalDistance_ft_allMoves)
 
 ###find rows/ instances where movement was greater than 50m for mobile and omit that row from the analysis
+######FOR TOMRROW: CANT just have it by runoff year, 
 allMovementdataCombinedMobileCorrected <- allMovementdataCombined %>%
   mutate(Notes = case_when(DetectionType == "Mobile" & Period == "After" & Distance < mobileStandardErrorValue ~ paste(Notes, "Distance moved is below mobile error threshold, distance changed to NA"), 
                            TRUE ~ Notes), 
@@ -462,17 +463,17 @@ write.csv(allMovementdataCombined3, "OutputData/AllMovementsCombined.csv", row.n
 #   select(all_of(names(AllPitRockData)))
 # write.csv(combinedNotes, "AllPitRockDataAllNotes.csv", row.names = F)
 #remove mobile only detections 
-mobileMovementsBelowError <- allMovementdataCombined %>%
-  filter(DetectionType == "Mobile", Period == "After",
-         Distance < mobileStandardErrorValue
-  ) 
-AllPitRockData2 <- AllPitRockData1 %>%
-  anti_join(mobileMovementsBelowError)
+# mobileMovementsBelowError <- allMovementdataCombined %>%
+#   filter(DetectionType == "Mobile", Period == "After",
+#          Distance < mobileStandardErrorValue
+#   ) 
+# AllPitRockData2 <- AllPitRockData1 %>%
+#   anti_join(mobileMovementsBelowError)
 #QAQC: these df rows should be equal, since we're removing mobile rows
 nrow(AllPitRockData1) - nrow(mobileMovementsBelowError) == nrow(AllPitRockData2)
 ### TOTAL cumulative distance by period
 #get distance between found/deploy and next found
-allDistance <- AllPitRockData2 %>%
+allDistance <- AllPitRockData1 %>%
   group_by(TagID, Period) %>%
   arrange(Date) %>%
   #this projection is in feet so it doesn't need a conversion
@@ -480,6 +481,7 @@ allDistance <- AllPitRockData2 %>%
          #TimePeriodDuration = paste(lag(Date), Date, sep = " - ")
          #D_ft = round(Distance * 3.28084, 2)
   ) #%>%
+#####Now I ned to filter out for mobile detections
 #QAQC: seeing if any "Deploy" data got distances associated
 #this df should be empty
 # x <- allDistance %>%
@@ -539,17 +541,17 @@ summaryFile <- allDistance %>%
 #so for rocks with mobile-only detection, if they moved less than 50 ft, exclude them from the analysis
 
 #some tags were detected more than once on mobile so there may be duplicates until Unique
-mobileOnlyTags <- AllPitRockData[which(AllPitRockData$DetectionType == "Mobile"), "TagID"]
-mobileOnlyTags <- unique(mobileOnlyTags$TagID)
-
-mobileTagsSummary <- summaryFile %>%
-  filter(TagID %in% mobileOnlyTags, 
-         Period == "After", 
-         totalDistance_ft < 50)
-mobileTagsWithinError <- mobileTagsSummary$TagID
-summaryFileMobileCorrected <- summaryFile %>%
-  mutate(totalDistance_ft = if_else(TagID %in% mobileTagsWithinError & Period == "After", NA, totalDistance_ft), 
-         Notes = if_else(TagID %in% mobileTagsWithinError & Period == "After", "Mobile Only detection within standard error range (50 ft). Ommitted from analysis.", ""))
+# mobileOnlyTags <- AllPitRockData[which(AllPitRockData$DetectionType == "Mobile"), "TagID"]
+# mobileOnlyTags <- unique(mobileOnlyTags$TagID)
+# 
+# mobileTagsSummary <- summaryFile %>%
+#   filter(TagID %in% mobileOnlyTags, 
+#          Period == "After", 
+#          totalDistance_ft < 50)
+# mobileTagsWithinError <- mobileTagsSummary$TagID
+# summaryFileMobileCorrected <- summaryFile %>%
+#   mutate(totalDistance_ft = if_else(TagID %in% mobileTagsWithinError & Period == "After", NA, totalDistance_ft), 
+#          Notes = if_else(TagID %in% mobileTagsWithinError & Period == "After", "Mobile Only detection within standard error range (50 ft). Ommitted from analysis.", ""))
 #This file gets manually copied and pasted into KB_Survey_PITRocks_Master_XXXXXXXX, sheet MasterPITRockList
 write.csv(summaryFileMobileCorrected, "OutputData/MasterPITRockList.csv", row.names = FALSE)
 
