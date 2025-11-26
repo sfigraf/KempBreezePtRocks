@@ -501,8 +501,21 @@ allMovementdataCombinedMobileCorrected <- allMovementdataCombined %>%
                               TRUE ~ Distance) 
   )
 
+#for trimble data that was mobile detected in the runoff year before and under the error threshold that has already been changed to NA, 
+#change this new year to NA bc previous dat apoint can't be relied on
+allMovementdataCombinedMobileCorrected1 <- allMovementdataCombinedMobileCorrected %>%
+  group_by(TagID, Period) %>%
+  arrange(Date) %>%
+  mutate(Distance = case_when(lag(DetectionType) == "Mobile" & Period == "After" & is.na(lag(Distance)) ~ NA, 
+                              TRUE ~ Distance), 
+         Notes = case_when(lag(DetectionType) == "Mobile" & Period == "After" & is.na(lag(Distance)) ~ paste(Notes, "Previous detection was mobile detection below mobile error threshold, distance changed to NA"), 
+                           TRUE ~ Notes
+         )
+         
+  )
+
 #getting desired columns/format
-allMovementdataCombined1 <- allMovementdataCombinedMobileCorrected %>%
+allMovementdataCombined1 <- allMovementdataCombinedMobileCorrected1 %>%
   ungroup() %>%
   rename(Distance_ft = Distance) %>%
   mutate(Size_Class2 = gsub('[[:digit:]]+', '', Size_Class), 
